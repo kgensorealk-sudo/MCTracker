@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map, PartyPopper, AlertOctagon } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map } from 'lucide-react';
 
 interface DashboardProps {
   userName: string;
@@ -722,11 +722,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <TrendingUp className="w-5 h-5 text-white" />
                </div>
                <div className="flex-1 overflow-hidden">
-                  <p className="font-bold text-sm text-white mb-0.5">{coachingMessage.title}</p>
+                  <p className="font-bold text-sm text-white mb-1">{coachingMessage.title}</p>
                   {/* Mini-Carousel for card view */}
-                  <div className="h-4 relative">
-                     <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0">
-                       <p className="text-xs text-white/80 truncate">{activeMsg}</p>
+                  <div className="h-8 relative">
+                     <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0 flex items-center">
+                       <p className="text-xs text-white/90 leading-snug line-clamp-2">{activeMsg}</p>
                      </div>
                   </div>
                </div>
@@ -735,76 +735,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* --- SMART PLAN & COACHING SECTION --- */}
+      {/* --- SMART PLAN SECTION --- */}
       <div className="grid grid-cols-1 gap-6 animate-fade-in-up delay-300">
         
-        {/* Pace Coach Banner (Sliding Carousel) */}
-        <div className={`rounded-2xl p-6 border flex items-center gap-5 shadow-sm relative overflow-hidden min-h-[140px] ${
-          coachingMessage.type === 'success' ? 'bg-gradient-to-r from-emerald-50 to-white border-emerald-100' :
-          coachingMessage.type === 'danger' ? 'bg-gradient-to-r from-rose-50 to-white border-rose-100' :
-          coachingMessage.type === 'warning' ? 'bg-gradient-to-r from-amber-50 to-white border-amber-100' :
-          'bg-white border-slate-200'
-        }`}>
-          <div className={`p-4 rounded-full shrink-0 ${
-             coachingMessage.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
-             coachingMessage.type === 'danger' ? 'bg-rose-100 text-rose-600' :
-             coachingMessage.type === 'warning' ? 'bg-amber-100 text-amber-600' :
-             'bg-slate-100 text-slate-500'
-          }`}>
-             {coachingMessage.type === 'success' ? <PartyPopper className="w-6 h-6" /> :
-              coachingMessage.type === 'danger' ? <AlertOctagon className="w-6 h-6" /> :
-              <Map className="w-6 h-6" />
-             }
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <h3 className={`text-lg font-bold mb-3 flex items-center gap-2 ${
-               coachingMessage.type === 'success' ? 'text-emerald-800' :
-               coachingMessage.type === 'danger' ? 'text-rose-800' :
-               'text-slate-800'
-            }`}>
-              {coachingMessage.title}
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border opacity-70">
-                Daily Tips
-              </span>
-            </h3>
-            
-            <div className="relative h-12 overflow-hidden">
-               <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0 flex items-start">
-                  <div className="flex items-start gap-3 text-sm">
-                    <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
-                      coachingMessage.type === 'success' ? 'bg-emerald-400' :
-                      coachingMessage.type === 'danger' ? 'bg-rose-400' :
-                      'bg-slate-400'
-                    }`}></div>
-                    <span className={`text-lg font-medium leading-relaxed ${
-                      coachingMessage.type === 'success' ? 'text-emerald-700' :
-                      coachingMessage.type === 'danger' ? 'text-rose-700' :
-                      'text-slate-600'
-                    }`}>
-                      {activeMsg}
-                    </span>
-                  </div>
-               </div>
-            </div>
-
-            {/* Pagination Dots */}
-            {coachingMessage.messages.length > 1 && (
-               <div className="flex gap-1.5 mt-2">
-                 {coachingMessage.messages.map((_, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`h-1.5 rounded-full transition-all duration-300 ${
-                        idx === activeMsgIndex 
-                           ? (coachingMessage.type === 'success' ? 'w-6 bg-emerald-400' : coachingMessage.type === 'danger' ? 'w-6 bg-rose-400' : 'w-6 bg-slate-400') 
-                           : (coachingMessage.type === 'success' ? 'w-1.5 bg-emerald-200' : coachingMessage.type === 'danger' ? 'w-1.5 bg-rose-200' : 'w-1.5 bg-slate-200')
-                      }`}
-                    />
-                 ))}
-               </div>
-            )}
-          </div>
-        </div>
-
         {/* Smart Schedule Horizontal Scroll */}
         {forecast.length > 0 && (
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
