@@ -24,8 +24,6 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
   const unlockedCount = ACHIEVEMENTS.filter(a => a.condition(manuscripts, target)).length;
   const totalAchievements = ACHIEVEMENTS.length;
   
-  const completedQuests = DAILY_QUESTS.filter(q => q.isCompleted(manuscripts)).length;
-
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'PLATINUM': return 'from-indigo-400 to-purple-500 text-white border-purple-300';

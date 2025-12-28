@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, Upload, FileSpreadsheet, AlertTriangle, FileText, CheckCircle } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertTriangle, FileText } from 'lucide-react';
 
 interface BulkImportModalProps {
   onImport: (manuscripts: Manuscript[]) => void;
@@ -11,7 +11,6 @@ interface BulkImportModalProps {
 const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, existingManuscripts }) => {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const parseDate = (dateStr?: string): string | null => {
     if (!dateStr || !dateStr.trim()) return null;
@@ -21,7 +20,6 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
 
   const processImport = () => {
     setError(null);
-    setSuccessMsg(null);
     if (!text.trim()) {
       setError("Please paste some data first.");
       return;

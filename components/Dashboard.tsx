@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, CalendarOff, Settings, Briefcase, RefreshCw } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, RefreshCw } from 'lucide-react';
 
 interface DashboardProps {
   userName: string;
