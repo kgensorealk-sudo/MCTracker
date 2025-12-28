@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map, PartyPopper, AlertOctagon, ArrowRight, Lightbulb } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map, PartyPopper, AlertOctagon } from 'lucide-react';
 
 interface DashboardProps {
   userName: string;
@@ -725,7 +725,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <p className="font-bold text-sm text-white mb-0.5">{coachingMessage.title}</p>
                   {/* Mini-Carousel for card view */}
                   <div className="h-4 relative">
-                     <div key={activeMsgIndex} className="animate-fade-in-up absolute inset-0">
+                     <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0">
                        <p className="text-xs text-white/80 truncate">{activeMsg}</p>
                      </div>
                   </div>
@@ -769,7 +769,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </h3>
             
             <div className="relative h-12 overflow-hidden">
-               <div key={activeMsgIndex} className="animate-fade-in-up absolute inset-0 flex items-start">
+               <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0 flex items-start">
                   <div className="flex items-start gap-3 text-sm">
                     <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
                       coachingMessage.type === 'success' ? 'bg-emerald-400' :
