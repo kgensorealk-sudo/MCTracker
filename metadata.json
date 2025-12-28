@@ -1,0 +1,5 @@
+{
+  "name": "MasterCopy Analyst Tracker",
+  "description": "A workflow management tool for Content Analysts to track manuscripts, manage JM queries, and validate publication checklists using AI assistance.",
+  "requestFramePermissions": []
+}
