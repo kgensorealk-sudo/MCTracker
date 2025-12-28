@@ -174,17 +174,17 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   const getStatusBadge = (status: Status) => {
     switch (status) {
       case Status.WORKED:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> Worked</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle className="w-3.5 h-3.5" /> Worked</span>;
       case Status.UNTOUCHED:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200"><Inbox className="w-3.5 h-3.5" /> Untouched</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200"><Inbox className="w-3.5 h-3.5" /> Untouched</span>;
       case Status.PENDING_JM:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200"><AlertCircle className="w-3.5 h-3.5" /> Pending: JM Query</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100"><AlertCircle className="w-3.5 h-3.5" /> JM Query</span>;
       case Status.PENDING_TL:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200"><AlertTriangle className="w-3.5 h-3.5" /> Pending: TL Query</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100"><AlertTriangle className="w-3.5 h-3.5" /> TL Query</span>;
       case Status.PENDING_CED:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200"><Mail className="w-3.5 h-3.5" /> Pending: Email CED</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100"><Mail className="w-3.5 h-3.5" /> Email CED</span>;
       default:
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">Unknown</span>;
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800 border border-gray-200">Unknown</span>;
     }
   };
 
@@ -197,12 +197,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in-up">
       {/* Bulk Action Bar (Fixed at bottom) */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white rounded-full px-6 py-3 shadow-xl z-50 flex items-center gap-4 animate-fade-in-up">
-           <span className="font-bold text-sm whitespace-nowrap">{selectedIds.size} selected</span>
-           <div className="h-4 w-px bg-slate-600"></div>
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-6 py-3 shadow-2xl z-50 flex items-center gap-4 animate-fade-in-up border border-slate-700">
+           <span className="font-bold text-sm whitespace-nowrap px-2 bg-slate-800 rounded-lg py-1">{selectedIds.size} selected</span>
+           <div className="h-4 w-px bg-slate-700"></div>
            
            {/* Primary Action: Review & Work */}
            <button 
@@ -213,7 +213,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
              <ListChecks className="w-4 h-4" /> Review & Mark Worked
            </button>
 
-           <div className="h-4 w-px bg-slate-600"></div>
+           <div className="h-4 w-px bg-slate-700"></div>
 
            <button 
              onClick={() => handleDirectBulkStatusChange(Status.PENDING_JM)}
@@ -221,40 +221,40 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
            >
              <AlertCircle className="w-4 h-4" /> JM Query
            </button>
-           <div className="h-4 w-px bg-slate-600"></div>
+           <div className="h-4 w-px bg-slate-700"></div>
            <button 
              onClick={() => setSelectedIds(new Set())}
-             className="text-slate-400 hover:text-white transition-colors"
+             className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-full"
            >
-             <X className="w-5 h-5" />
+             <X className="w-4 h-4" />
            </button>
         </div>
       )}
 
       {/* Filters Toolbar */}
       <div className="border-b border-slate-200 bg-slate-50/50">
-        <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div className="flex gap-2 w-full md:w-auto items-center">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <div className="p-4 flex flex-col xl:flex-row gap-4 justify-between items-center">
+          <div className="flex gap-2 w-full xl:w-auto items-center">
+            <div className="relative w-full md:w-80 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
-                placeholder="Search ID, Journal..."
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Search ID, Journal code..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all bg-white"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
             <button
                onClick={() => setShowDateFilters(!showDateFilters)}
-               className={`p-2 rounded-lg border transition-colors ${showDateFilters ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}
+               className={`p-2.5 rounded-xl border transition-all ${showDateFilters ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-inner' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300'}`}
                title="Filter by Date"
             >
                <Calendar className="w-5 h-5" />
             </button>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto overflow-x-auto items-center">
+          <div className="flex gap-2 w-full xl:w-auto overflow-x-auto items-center pb-1 xl:pb-0 hide-scrollbar">
             {(['ALL', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
               const statusKey = key === 'ALL' ? 'ALL' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
               
@@ -262,10 +262,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                 <button
                   key={key}
                   onClick={() => setFilterStatus(statusKey)}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
+                  className={`px-4 py-2 text-sm font-medium rounded-xl transition-all whitespace-nowrap flex items-center gap-2 ${
                     filterStatus === statusKey
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      ? 'bg-slate-900 text-white shadow-md transform scale-105'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <span>
@@ -273,30 +273,30 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                      key === 'PENDING_GROUP' ? 'Pending / Queries' : 
                      key.charAt(0) + key.slice(1).toLowerCase()}
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${
                      filterStatus === statusKey 
-                      ? 'bg-slate-600 text-slate-100' 
-                      : 'bg-slate-200 text-slate-600 group-hover:bg-slate-300'
+                      ? 'bg-slate-700 text-slate-100' 
+                      : 'bg-slate-100 text-slate-500'
                   }`}>
                     {counts[key as keyof typeof counts]}
                   </span>
                 </button>
               );
             })}
-            <div className="h-8 w-px bg-slate-300 mx-2 hidden md:block"></div>
+            <div className="h-6 w-px bg-slate-200 mx-2 hidden xl:block"></div>
             <button
               onClick={downloadCSV}
-              className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-2 whitespace-nowrap"
+              className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 flex items-center gap-2 whitespace-nowrap transition-all"
               title="Export to CSV"
             >
-              <Download className="w-4 h-4" /> Export
+              <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
             </button>
           </div>
         </div>
 
         {/* Date Filter Section */}
         {showDateFilters && (
-             <div className="px-4 pb-4 flex flex-wrap gap-4 items-center animate-fade-in-down border-t border-slate-200 pt-4 bg-slate-50">
+             <div className="px-4 pb-4 flex flex-wrap gap-4 items-center animate-scale-in origin-top border-t border-slate-200 pt-4 bg-slate-50">
                 <div className="flex items-center gap-2">
                    <Filter className="w-4 h-4 text-slate-400" />
                    <span className="text-sm text-slate-700 font-medium">Filter by:</span>
@@ -343,14 +343,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       {/* Table */}
       <div className="overflow-x-auto min-h-[400px]">
         <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-slate-700 font-semibold uppercase tracking-wider text-xs border-b border-slate-200">
+          <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 w-10">
                 <input 
                   type="checkbox" 
                   checked={filtered.length > 0 && selectedIds.size === filtered.length}
                   onChange={handleSelectAll}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors"
                 />
               </th>
               <th className="px-4 py-3">Status</th>
@@ -363,11 +363,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 bg-white">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                  No manuscripts found matching your criteria.
+                <td colSpan={9} className="px-4 py-24 text-center text-slate-400">
+                  <div className="flex flex-col items-center gap-2">
+                    <Inbox className="w-12 h-12 text-slate-200" />
+                    <p>No manuscripts found matching your criteria.</p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -383,29 +386,29 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                const isSelected = selectedIds.has(m.id);
 
                return (
-                <tr key={m.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-blue-50/50' : ''}`}>
+                <tr key={m.id} className={`group transition-colors duration-200 ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
                   <td className="px-4 py-3">
                     <input 
                       type="checkbox" 
                       checked={isSelected}
                       onChange={() => handleSelectOne(m.id)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors"
                     />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {getStatusBadge(m.status)}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded' : 'text-slate-500'}`}>
+                    <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>
                       {displayDate}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-900">{m.manuscriptId}</span>
+                        <span className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{m.manuscriptId}</span>
                       </div>
-                      <div className="text-slate-500 text-xs">{m.journalCode}</div>
+                      <div className="text-slate-400 text-xs font-mono">{m.journalCode}</div>
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -420,10 +423,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                     <select
                       value={m.priority}
                       onChange={(e) => onUpdate(m.id, { priority: e.target.value as any })}
-                      className={`block w-full text-xs font-semibold px-2 py-1 rounded border appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 ${
-                        m.priority === 'Urgent' ? 'bg-red-50 text-red-600 border-red-100' : 
-                        m.priority === 'High' ? 'bg-orange-50 text-orange-600 border-orange-100' : 
-                        'bg-white text-slate-600 border-slate-200'
+                      className={`block w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                        m.priority === 'Urgent' ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 
+                        m.priority === 'High' ? 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100' : 
+                        'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                       }`}
                     >
                       <option value="Normal">Normal</option>
@@ -436,7 +439,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       {m.issueTypes.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-1">
                           {m.issueTypes.map(issue => (
-                            <span key={issue} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] border border-slate-200">
+                            <span key={issue} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] border border-slate-200">
                               {issue.split('/')[0]}
                             </span>
                           ))}
@@ -446,9 +449,9 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       {m.notes.length > 0 ? (
                         <div className="flex flex-col gap-2">
                           {m.notes.map((note) => (
-                            <div key={note.id} className="bg-slate-50 p-2 rounded border border-slate-100 shadow-sm">
-                              <div className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{note.content}</div>
-                              <div className="text-[10px] text-slate-400 mt-1.5 text-right flex justify-end items-center gap-1">
+                            <div key={note.id} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
+                              <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{note.content}</div>
+                              <div className="text-[10px] text-slate-400 mt-1 text-right flex justify-end items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {new Date(note.timestamp).toLocaleString(undefined, {
                                   month: 'short',
@@ -461,12 +464,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                           ))}
                         </div>
                       ) : (
-                        m.issueTypes.length === 0 && <span className="text-[10px] text-slate-400 italic">No remarks</span>
+                        m.issueTypes.length === 0 && <span className="text-[10px] text-slate-300 italic">No remarks</span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-2">
+                    <div className="flex justify-end items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       
                       {/* Resolve/Complete Button */}
                       {([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED, Status.UNTOUCHED].includes(m.status)) && (
@@ -480,7 +483,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                               onUpdate(m.id, { status: Status.WORKED });
                             }
                           }}
-                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md border border-emerald-200 transition-colors shadow-sm"
+                          className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all shadow-sm hover:shadow"
                           title="Mark as Worked"
                         >
                           <CheckSquare className="w-4 h-4" />
@@ -488,18 +491,19 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       )}
 
                       <button 
-                        onClick={() => onDelete(m.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md border border-transparent hover:border-red-200 transition-colors"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button 
                         onClick={() => onEdit(m)}
-                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-md border border-transparent hover:border-slate-300"
+                        className="p-2 text-slate-500 hover:bg-slate-100 hover:text-blue-600 rounded-lg transition-all"
                         title="Edit Details"
                       >
                         <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button 
+                        onClick={() => onDelete(m.id)}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete Record"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>

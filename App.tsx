@@ -291,8 +291,8 @@ const App: React.FC = () => {
   if (!isSupabaseConfigured) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200 text-center animate-fade-in">
-          <div className="mx-auto bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-6">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200 text-center animate-fade-in-up">
+          <div className="mx-auto bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-6 ring-8 ring-blue-50">
             <Database className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800 mb-3">Setup Required</h1>
@@ -327,12 +327,15 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col relative">
+      {/* Decorative background blob */}
+      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50 to-transparent -z-10 pointer-events-none opacity-60"></div>
+
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+      <header className="glass border-b border-slate-200/60 sticky top-0 z-30 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-600 rounded-lg shadow-sm">
+            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg shadow-lg shadow-blue-500/20">
               <ShieldCheck className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
@@ -340,16 +343,16 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
-            <nav className="flex bg-slate-100 p-1 rounded-lg">
+            <nav className="flex bg-slate-100/80 p-1 rounded-xl">
               <button 
                 onClick={() => handleViewChange('dashboard')}
-                className={`px-3 sm:px-4 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
                 <div className="flex items-center gap-2"><LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Overview</span></div>
               </button>
               <button 
                 onClick={() => handleViewChange('list')}
-                className={`px-3 sm:px-4 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
                 <div className="flex items-center gap-2"><List className="w-4 h-4" /> <span className="hidden sm:inline">Workflow List</span></div>
               </button>
@@ -361,49 +364,49 @@ const App: React.FC = () => {
                   onClick={() => setIsGamificationOpen(true)}
                   className="text-[10px] text-blue-600 uppercase tracking-wider font-bold hover:underline"
                 >
-                  View Profile & Rewards
+                  View Rewards
                 </button>
             </div>
 
             <div className="flex gap-2">
                <button
                 onClick={() => loadData()}
-                className="bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
                 title="Sync / Refresh Data"
               >
                 <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={() => setIsDevOpen(true)}
-                className="bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
                 title="Developer Settings"
               >
                 <Database className="w-4 h-4" />
-                <span className="hidden lg:inline">Dev Setup</span>
+                <span className="hidden lg:inline">Dev</span>
               </button>
               <button
                 onClick={() => setIsGamificationOpen(true)}
-                className="bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-amber-100 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                 title="Achievements"
               >
                 <Trophy className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setIsImportOpen(true)}
-                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
                 title="Import"
               >
                 <Upload className="w-4 h-4" />
               </button>
               <button
                 onClick={() => { setEditingId(null); setIsFormOpen(true); }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0"
               >
                 <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Log Work</span>
               </button>
               <button
                 onClick={handleSignOut}
-                className="bg-white hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
+                className="bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow"
                 title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
