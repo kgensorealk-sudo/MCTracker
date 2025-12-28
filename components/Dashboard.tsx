@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, RefreshCw } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase } from 'lucide-react';
 
 interface DashboardProps {
   userName: string;
@@ -124,11 +124,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // --- Statistics Logic (Both Overall and Cycle) ---
   const stats = useMemo(() => {
-    const { startDate, endDate } = cycleDates;
+    // Access directly to avoid unused variable warning if destructuring triggers it falsely
     const inCycle = (dateStr?: string) => {
       if (!dateStr) return false;
       const d = new Date(dateStr);
-      return d >= startDate && d <= endDate;
+      return d >= cycleDates.startDate && d <= cycleDates.endDate;
     };
 
     // Overall Totals
@@ -170,7 +170,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [manuscripts, cycleDates]);
 
   const cycleData = useMemo(() => {
-    const { startDate, endDate, cycleLabel } = cycleDates;
+    const { endDate, cycleLabel } = cycleDates;
     const d = new Date();
 
     const percentage = Math.min(100, Math.round((stats.cycleWorked / target) * 100));
@@ -630,7 +630,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 const StatCard: React.FC<{ 
   title: string; 
   value: number; 
-  cycleValue?: number;
+  cycleValue?: number; 
   cycleLabel?: string;
   icon: React.ReactNode; 
   color: string; 
