@@ -31,6 +31,10 @@ const App: React.FC = () => {
   const [isDevOpen, setIsDevOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Bulk Review Queue State
+  const [bulkQueue, setBulkQueue] = useState<string[]>([]);
+  const [isBulkReview, setIsBulkReview] = useState(false);
+
   // Auth & Initial Load
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -90,8 +94,20 @@ const App: React.FC = () => {
         const created = await dataService.createManuscript(manuscript);
         setManuscripts(prev => [created, ...prev]);
       }
-      setIsFormOpen(false);
-      setEditingId(null);
+      
+      // Bulk Review Logic: Move to next item or close
+      if (isBulkReview && bulkQueue.length > 0) {
+        const nextId = bulkQueue[0];
+        setBulkQueue(prev => prev.slice(1));
+        setEditingId(nextId);
+        // Do not close form, ManuscriptForm will update via useEffect on initialData change
+      } else {
+        // Queue finished or normal save
+        setIsFormOpen(false);
+        setEditingId(null);
+        setIsBulkReview(false);
+        setBulkQueue([]);
+      }
     } catch (error) {
       console.error("Error saving:", error);
       alert("Failed to save record.");
@@ -124,15 +140,49 @@ const App: React.FC = () => {
 
     try {
       await dataService.updateManuscript(updatedManuscript);
-      // Optional: Refresh from DB to confirm
-      // const refreshed = await dataService.updateManuscript(updatedManuscript);
-      // setManuscripts(prev => prev.map(m => m.id === id ? refreshed : m));
     } catch (error) {
       console.error("Quick update failed:", error);
       alert("Failed to update record.");
-      // Revert logic could go here
       setManuscripts(prev => prev.map(m => m.id === id ? original : m));
     }
+  };
+
+  const handleBulkUpdate = async (ids: string[], updates: Partial<Manuscript>) => {
+    if (ids.length === 0) return;
+    setDataLoading(true);
+
+    const now = new Date().toISOString();
+    const finalUpdates = { ...updates, dateStatusChanged: now };
+
+    if (updates.status === Status.WORKED) {
+      finalUpdates.completedDate = now;
+    }
+
+    setManuscripts(prev => prev.map(m => 
+      ids.includes(m.id) ? { ...m, ...finalUpdates, dateUpdated: now } : m
+    ));
+
+    try {
+      await dataService.updateManuscripts(ids, finalUpdates);
+    } catch (error) {
+      console.error("Bulk update failed:", error);
+      alert("Failed to update multiple records.");
+      loadData(); 
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // Start the interactive review queue
+  const handleBulkReview = (ids: string[]) => {
+    if (ids.length === 0) return;
+    
+    setIsBulkReview(true);
+    // Queue is everything AFTER the first one
+    setBulkQueue(ids.slice(1));
+    // Immediately open the first one
+    setEditingId(ids[0]);
+    setIsFormOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -153,7 +203,6 @@ const App: React.FC = () => {
   const handleBulkImport = async (newItems: Manuscript[]) => {
     setDataLoading(true);
     try {
-      // Create sequentially to ensure order/safety
       const createdItems: Manuscript[] = [];
       for (const item of newItems) {
         const created = await dataService.createManuscript(item);
@@ -165,14 +214,12 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Bulk import failed:", error);
       alert("Some items failed to import.");
-      // Reload to ensure consistency
       loadData();
     } finally {
       setDataLoading(false);
     }
   };
 
-  // Setting Updates
   const handleUpdateTarget = (target: number) => {
     setTargetPerCycle(target);
     dataService.updateTarget(target).catch(console.error);
@@ -182,7 +229,6 @@ const App: React.FC = () => {
     setUserSchedule(schedule);
     dataService.updateSchedule(schedule).catch(err => {
       console.error("Schedule sync failed:", err);
-      // If error suggests missing column, prompt user to run Dev Setup
       if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column') || err.message.includes('relation'))) {
          alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
       }
@@ -198,6 +244,8 @@ const App: React.FC = () => {
   const handleFormCancel = () => {
     setIsFormOpen(false);
     setEditingId(null);
+    setIsBulkReview(false);
+    setBulkQueue([]);
   };
 
   const handleDashboardFilter = (filter: Status | 'ALL' | 'PENDING_GROUP') => {
@@ -215,6 +263,26 @@ const App: React.FC = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setManuscripts([]);
+  };
+
+  // Construct data for the form.
+  // If in Bulk Review mode, we override status to WORKED and completedDate to Today
+  const getEditingData = () => {
+    if (!editingId) return undefined;
+    const m = manuscripts.find(x => x.id === editingId);
+    if (!m) return undefined;
+    
+    if (isBulkReview) {
+       return {
+         ...m,
+         status: Status.WORKED,
+         // Default to now if not already set, or override? 
+         // User wants to "Mark as worked", so we pre-fill.
+         completedDate: m.completedDate || new Date().toISOString(),
+         dateStatusChanged: new Date().toISOString()
+       };
+    }
+    return m;
   };
 
   const user = session?.user;
@@ -287,7 +355,6 @@ const App: React.FC = () => {
               </button>
             </nav>
             
-            {/* User Profile Display */}
             <div className="hidden md:flex flex-col items-end mr-2 pl-4 border-l border-slate-200">
                 <span className="text-sm font-semibold text-slate-800 leading-tight">{userName}</span>
                 <button 
@@ -309,7 +376,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setIsDevOpen(true)}
                 className="bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
-                title="Developer Settings / Database Setup"
+                title="Developer Settings"
               >
                 <Database className="w-4 h-4" />
                 <span className="hidden lg:inline">Dev Setup</span>
@@ -317,7 +384,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setIsGamificationOpen(true)}
                 className="bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
-                title="Career Profile & Quests"
+                title="Achievements"
               >
                 <Trophy className="w-4 h-4" />
               </button>
@@ -364,6 +431,8 @@ const App: React.FC = () => {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onUpdate={handleQuickUpdate}
+            onBulkUpdate={handleBulkUpdate}
+            onBulkReview={handleBulkReview} // Passed new handler
             activeFilter={listFilter}
           />
         )}
@@ -372,9 +441,12 @@ const App: React.FC = () => {
       {/* Modals */}
       {isFormOpen && (
         <ManuscriptForm 
-          initialData={editingId ? manuscripts.find(m => m.id === editingId) : undefined}
+          initialData={getEditingData()} // Uses pre-filled logic for bulk review
           onSave={handleSave}
           onCancel={handleFormCancel}
+          isQueueMode={isBulkReview}
+          queueLength={bulkQueue.length}
+          existingManuscripts={manuscripts}
         />
       )}
 
@@ -382,6 +454,7 @@ const App: React.FC = () => {
         <BulkImportModal
           onImport={handleBulkImport}
           onClose={() => setIsImportOpen(false)}
+          existingManuscripts={manuscripts}
         />
       )}
 

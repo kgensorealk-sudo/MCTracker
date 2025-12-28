@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, CalendarOff, Settings, Briefcase } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, CalendarOff, Settings, Briefcase, RefreshCw } from 'lucide-react';
 
 interface DashboardProps {
   userName: string;
@@ -88,17 +88,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Default weights if missing (Full week)
   const weights = userSchedule.weeklyWeights || [1, 1, 1, 1, 1, 1, 1];
 
-  // --- Statistics Logic ---
-  const stats = useMemo(() => {
-    return {
-      worked: manuscripts.filter(m => m.status === Status.WORKED).length,
-      untouched: manuscripts.filter(m => m.status === Status.UNTOUCHED).length,
-      pendingTotal: manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length,
-      total: manuscripts.length
-    };
-  }, [manuscripts]);
-
-  const cycleData = useMemo(() => {
+  // 1. Calculate Cycle Dates Logic (Reusable)
+  const cycleDates = useMemo(() => {
     const d = new Date();
     const day = d.getDate();
     const month = d.getMonth(); 
@@ -125,20 +116,66 @@ const Dashboard: React.FC<DashboardProps> = ({
       cycleLabel = `26th ${startStr} - 10th ${endStr}`;
     }
 
-    endDate.setHours(23, 59, 59, 999);
     startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
-    const completedInCycle = manuscripts.filter(m => {
+    return { startDate, endDate, cycleLabel };
+  }, []);
+
+  // --- Statistics Logic (Both Overall and Cycle) ---
+  const stats = useMemo(() => {
+    const { startDate, endDate } = cycleDates;
+    const inCycle = (dateStr?: string) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return d >= startDate && d <= endDate;
+    };
+
+    // Overall Totals
+    const totalFiles = manuscripts.length;
+    const totalWorked = manuscripts.filter(m => m.status === Status.WORKED).length;
+    const totalUntouched = manuscripts.filter(m => m.status === Status.UNTOUCHED).length;
+    const totalPending = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length;
+
+    // Cycle Specifics
+    const cycleReceived = manuscripts.filter(m => inCycle(m.dateReceived)).length;
+    
+    // Cycle Worked: Completed Date falls in cycle
+    const cycleWorked = manuscripts.filter(m => {
       if (m.status !== Status.WORKED) return false;
-      const dateStr = m.completedDate || m.dateStatusChanged || m.dateUpdated;
-      const date = new Date(dateStr); 
-      return date >= startDate && date <= endDate;
+      return inCycle(m.completedDate || m.dateStatusChanged || m.dateUpdated);
     }).length;
 
-    const percentage = Math.min(100, Math.round((completedInCycle / target) * 100));
+    // Cycle Untouched: Untouched AND Received in this cycle
+    const cycleUntouched = manuscripts.filter(m => 
+      m.status === Status.UNTOUCHED && inCycle(m.dateReceived)
+    ).length;
+
+    // Cycle Pending: Pending AND Status Changed in this cycle (Fresh queries)
+    const cyclePending = manuscripts.filter(m => 
+      [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && 
+      inCycle(m.dateStatusChanged || m.dateUpdated)
+    ).length;
+
+    return {
+      totalFiles,
+      totalWorked,
+      totalUntouched,
+      totalPending,
+      cycleReceived,
+      cycleWorked,
+      cycleUntouched,
+      cyclePending
+    };
+  }, [manuscripts, cycleDates]);
+
+  const cycleData = useMemo(() => {
+    const { startDate, endDate, cycleLabel } = cycleDates;
+    const d = new Date();
+
+    const percentage = Math.min(100, Math.round((stats.cycleWorked / target) * 100));
 
     // Calculate "Weighted Days Left"
-    // Instead of simply counting days, we sum their weights (0, 0.5, 1)
     const tempToday = new Date();
     tempToday.setHours(0,0,0,0);
     
@@ -162,13 +199,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     return {
       label: cycleLabel,
-      completed: completedInCycle,
+      completed: stats.cycleWorked,
       percentage,
       calendarDaysLeft,
       weightedDaysLeft, // This represents "Full Work Day Equivalents" remaining
       endDateStr: endDate.toLocaleString('default', { month: 'short', day: 'numeric' })
     };
-  }, [manuscripts, target, userSchedule]);
+  }, [manuscripts, target, userSchedule, cycleDates, stats.cycleWorked]);
 
   const dailyStats = useMemo(() => {
     const d = new Date();
@@ -260,9 +297,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const pieData = [
-    { name: 'Worked', value: stats.worked },
-    { name: 'Untouched', value: stats.untouched },
-    { name: 'Pending', value: stats.pendingTotal },
+    { name: 'Worked', value: stats.totalWorked },
+    { name: 'Untouched', value: stats.totalUntouched },
+    { name: 'Pending', value: stats.totalPending },
   ].filter(d => d.value > 0);
 
   const activityData = useMemo(() => {
@@ -395,7 +432,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard 
           title="Total Files" 
-          value={stats.total} 
+          value={stats.totalFiles} 
+          cycleValue={stats.cycleReceived}
+          cycleLabel="Received this cycle"
           icon={<FileText className="w-5 h-5" />} 
           color="border-b-blue-500"
           trend="All Time"
@@ -403,7 +442,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <StatCard 
           title="Untouched" 
-          value={stats.untouched} 
+          value={stats.totalUntouched} 
+          cycleValue={stats.cycleUntouched}
+          cycleLabel="untouched this cycle"
           icon={<Inbox className="w-5 h-5" />} 
           color="border-b-slate-400"
           trend="Needs Action"
@@ -411,7 +452,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <StatCard 
           title="Pending" 
-          value={stats.pendingTotal} 
+          value={stats.totalPending} 
+          cycleValue={stats.cyclePending}
+          cycleLabel="Queried this cycle"
           icon={<AlertCircle className="w-5 h-5" />} 
           color="border-b-rose-500"
           trend="Queries"
@@ -419,7 +462,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <StatCard 
           title="Completed" 
-          value={stats.worked} 
+          value={stats.totalWorked} 
+          cycleValue={stats.cycleWorked}
+          cycleLabel="Worked this cycle"
           icon={<CheckCircle className="w-5 h-5" />} 
           color="border-b-emerald-500"
           trend="Finished"
@@ -585,11 +630,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 const StatCard: React.FC<{ 
   title: string; 
   value: number; 
+  cycleValue?: number;
+  cycleLabel?: string;
   icon: React.ReactNode; 
   color: string; 
   trend: string;
   onClick: () => void; 
-}> = ({ title, value, icon, color, trend, onClick }) => (
+}> = ({ title, value, cycleValue, cycleLabel, icon, color, trend, onClick }) => (
   <button 
     onClick={onClick}
     className={`group relative w-full bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300 text-left overflow-hidden`}
@@ -605,7 +652,14 @@ const StatCard: React.FC<{
     </div>
     <div>
        <p className="text-3xl font-bold text-slate-800 mb-1 group-hover:scale-105 transition-transform origin-left">{value}</p>
-       <p className="text-sm font-medium text-slate-500">{title}</p>
+       <p className="text-sm font-medium text-slate-500 mb-2">{title}</p>
+       
+       {cycleValue !== undefined && (
+         <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-xs">
+           <span className="font-bold text-slate-700">{cycleValue}</span>
+           <span className="text-slate-400">{cycleLabel || 'this cycle'}</span>
+         </div>
+       )}
     </div>
   </button>
 );

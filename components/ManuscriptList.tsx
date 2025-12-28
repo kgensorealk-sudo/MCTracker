@@ -1,21 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare } from 'lucide-react';
+import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter } from 'lucide-react';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
   onEdit: (m: Manuscript) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Manuscript>) => void;
+  onBulkUpdate: (ids: string[], updates: Partial<Manuscript>) => void;
+  onBulkReview?: (ids: string[]) => void; // New optional prop for review mode
   activeFilter: Status | 'ALL' | 'PENDING_GROUP';
 }
 
-const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, activeFilter }) => {
+const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkReview, activeFilter }) => {
   const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP'>(activeFilter);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // Date Filtering State
+  const [showDateFilters, setShowDateFilters] = useState(false);
+  const [dateRange, setDateRange] = useState({ 
+    start: '', 
+    end: '', 
+    field: 'dateReceived' // Default to Date Sent
+  });
 
   useEffect(() => {
     setFilterStatus(activeFilter);
+    setSelectedIds(new Set()); // Reset selection on filter change
   }, [activeFilter]);
 
   // Compute counts for the tabs
@@ -28,6 +40,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   const filtered = manuscripts.filter(m => {
+    // 1. Status Filter
     let matchesStatus = false;
     if (filterStatus === 'ALL') matchesStatus = true;
     else if (filterStatus === 'PENDING_GROUP') {
@@ -36,11 +49,76 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       matchesStatus = m.status === filterStatus;
     }
 
+    // 2. Search Filter
     const matchesSearch = 
       m.manuscriptId.toLowerCase().includes(search.toLowerCase()) || 
       m.journalCode.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
+
+    // 3. Date Filter
+    const matchesDate = (() => {
+      if (!dateRange.start && !dateRange.end) return true;
+      
+      let dateValue: string | undefined;
+      
+      if (dateRange.field === 'dateStatusChanged') {
+           // For Worked items, we prioritize completedDate. For others, status changed date.
+           dateValue = (m.status === Status.WORKED && m.completedDate) 
+             ? m.completedDate 
+             : (m.dateStatusChanged || m.dateUpdated);
+      } else if (dateRange.field === 'dueDate') {
+           dateValue = m.dueDate;
+      } else {
+           dateValue = m.dateReceived;
+      }
+      
+      if (!dateValue) return false;
+      
+      const itemTime = new Date(dateValue).getTime();
+      if (isNaN(itemTime)) return false;
+      
+      const startTime = dateRange.start ? new Date(dateRange.start).setHours(0,0,0,0) : -Infinity;
+      const endTime = dateRange.end ? new Date(dateRange.end).setHours(23,59,59,999) : Infinity;
+      
+      return itemTime >= startTime && itemTime <= endTime;
+    })();
+
+    return matchesStatus && matchesSearch && matchesDate;
   });
+
+  // --- Selection Logic ---
+  const handleSelectAll = () => {
+    if (selectedIds.size === filtered.length && filtered.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(m => m.id)));
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  // Direct Update (no modal)
+  const handleDirectBulkStatusChange = (status: Status) => {
+    if (window.confirm(`Are you sure you want to mark ${selectedIds.size} items as ${status}?`)) {
+      onBulkUpdate(Array.from(selectedIds), { status });
+      setSelectedIds(new Set());
+    }
+  };
+
+  // Interactive Review Mode
+  const handleReviewBulk = () => {
+    if (onBulkReview) {
+      onBulkReview(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    }
+  };
 
   const downloadCSV = () => {
     // Removed 'Issues', Renamed 'Completed Date' to 'Submitted Date'
@@ -119,65 +197,162 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+      {/* Bulk Action Bar (Fixed at bottom) */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white rounded-full px-6 py-3 shadow-xl z-50 flex items-center gap-4 animate-fade-in-up">
+           <span className="font-bold text-sm whitespace-nowrap">{selectedIds.size} selected</span>
+           <div className="h-4 w-px bg-slate-600"></div>
+           
+           {/* Primary Action: Review & Work */}
+           <button 
+             onClick={handleReviewBulk}
+             className="flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm font-medium"
+             title="Open selected items one by one to mark as worked"
+           >
+             <ListChecks className="w-4 h-4" /> Review & Mark Worked
+           </button>
+
+           <div className="h-4 w-px bg-slate-600"></div>
+
+           <button 
+             onClick={() => handleDirectBulkStatusChange(Status.PENDING_JM)}
+             className="flex items-center gap-2 hover:text-rose-400 transition-colors text-sm font-medium"
+           >
+             <AlertCircle className="w-4 h-4" /> JM Query
+           </button>
+           <div className="h-4 w-px bg-slate-600"></div>
+           <button 
+             onClick={() => setSelectedIds(new Set())}
+             className="text-slate-400 hover:text-white transition-colors"
+           >
+             <X className="w-5 h-5" />
+           </button>
+        </div>
+      )}
+
       {/* Filters Toolbar */}
-      <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center bg-slate-50/50">
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search ID, Journal..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      <div className="border-b border-slate-200 bg-slate-50/50">
+        <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="flex gap-2 w-full md:w-auto items-center">
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search ID, Journal..."
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <button
+               onClick={() => setShowDateFilters(!showDateFilters)}
+               className={`p-2 rounded-lg border transition-colors ${showDateFilters ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}
+               title="Filter by Date"
+            >
+               <Calendar className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto items-center">
+            {(['ALL', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
+              const statusKey = key === 'ALL' ? 'ALL' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
+              
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilterStatus(statusKey)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
+                    filterStatus === statusKey
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  <span>
+                    {key === 'ALL' ? 'All Files' : 
+                     key === 'PENDING_GROUP' ? 'Pending / Queries' : 
+                     key.charAt(0) + key.slice(1).toLowerCase()}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                     filterStatus === statusKey 
+                      ? 'bg-slate-600 text-slate-100' 
+                      : 'bg-slate-200 text-slate-600 group-hover:bg-slate-300'
+                  }`}>
+                    {counts[key as keyof typeof counts]}
+                  </span>
+                </button>
+              );
+            })}
+            <div className="h-8 w-px bg-slate-300 mx-2 hidden md:block"></div>
+            <button
+              onClick={downloadCSV}
+              className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-2 whitespace-nowrap"
+              title="Export to CSV"
+            >
+              <Download className="w-4 h-4" /> Export
+            </button>
+          </div>
         </div>
-        
-        <div className="flex gap-2 w-full md:w-auto overflow-x-auto items-center">
-          {(['ALL', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
-            const statusKey = key === 'ALL' ? 'ALL' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
-            
-            return (
-              <button
-                key={key}
-                onClick={() => setFilterStatus(statusKey)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
-                  filterStatus === statusKey
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <span>
-                  {key === 'ALL' ? 'All Files' : 
-                   key === 'PENDING_GROUP' ? 'Pending / Queries' : 
-                   key.charAt(0) + key.slice(1).toLowerCase()}
-                </span>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                   filterStatus === statusKey 
-                    ? 'bg-slate-600 text-slate-100' 
-                    : 'bg-slate-200 text-slate-600 group-hover:bg-slate-300'
-                }`}>
-                  {counts[key as keyof typeof counts]}
-                </span>
-              </button>
-            );
-          })}
-          <div className="h-8 w-px bg-slate-300 mx-2 hidden md:block"></div>
-          <button
-            onClick={downloadCSV}
-            className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-2 whitespace-nowrap"
-            title="Export to CSV"
-          >
-            <Download className="w-4 h-4" /> Export
-          </button>
-        </div>
+
+        {/* Date Filter Section */}
+        {showDateFilters && (
+             <div className="px-4 pb-4 flex flex-wrap gap-4 items-center animate-fade-in-down border-t border-slate-200 pt-4 bg-slate-50">
+                <div className="flex items-center gap-2">
+                   <Filter className="w-4 h-4 text-slate-400" />
+                   <span className="text-sm text-slate-700 font-medium">Filter by:</span>
+                   <select 
+                      className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white py-1.5"
+                      value={dateRange.field}
+                      onChange={e => setDateRange({...dateRange, field: e.target.value})}
+                   >
+                      <option value="dateReceived">Date Sent (Received)</option>
+                      <option value="dateStatusChanged">Status / Completed Date</option>
+                      <option value="dueDate">Due Date</option>
+                   </select>
+                </div>
+                <div className="flex items-center gap-2">
+                   <span className="text-sm text-slate-500">From</span>
+                   <input 
+                      type="date" 
+                      className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5"
+                      value={dateRange.start}
+                      onChange={e => setDateRange({...dateRange, start: e.target.value})}
+                   />
+                </div>
+                <div className="flex items-center gap-2">
+                   <span className="text-sm text-slate-500">To</span>
+                   <input 
+                      type="date" 
+                      className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5"
+                      value={dateRange.end}
+                      onChange={e => setDateRange({...dateRange, end: e.target.value})}
+                   />
+                </div>
+                {(dateRange.start || dateRange.end) && (
+                    <button 
+                       onClick={() => setDateRange({...dateRange, start: '', end: ''})}
+                       className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                    >
+                       <X className="w-3 h-3" /> Clear
+                    </button>
+                )}
+             </div>
+        )}
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto min-h-[400px]">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 text-slate-700 font-semibold uppercase tracking-wider text-xs border-b border-slate-200">
             <tr>
+              <th className="px-4 py-3 w-10">
+                <input 
+                  type="checkbox" 
+                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={handleSelectAll}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                />
+              </th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Status Date</th>
               <th className="px-4 py-3">ID / Journal</th>
@@ -191,7 +366,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                   No manuscripts found matching your criteria.
                 </td>
               </tr>
@@ -205,9 +380,18 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                const dateObj = new Date(displayDateRaw);
                const displayDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
                const isActivityToday = isToday(dateObj);
+               const isSelected = selectedIds.has(m.id);
 
                return (
-                <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
+                <tr key={m.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-blue-50/50' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected}
+                      onChange={() => handleSelectOne(m.id)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                    />
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {getStatusBadge(m.status)}
                   </td>
@@ -284,16 +468,20 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex justify-end items-center gap-2">
                       
-                      {/* Resolve Button for Pending Items */}
-                      {[Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && (
+                      {/* Resolve/Complete Button */}
+                      {([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED, Status.UNTOUCHED].includes(m.status)) && (
                         <button 
                           onClick={() => {
-                            if (window.confirm('Mark this query as resolved (Worked)?')) {
+                             // Customize message based on status
+                             const msg = m.status === Status.UNTOUCHED 
+                               ? 'Mark this item as Completed (Worked)?'
+                               : 'Mark this query as resolved (Worked)?';
+                            if (window.confirm(msg)) {
                               onUpdate(m.id, { status: Status.WORKED });
                             }
                           }}
                           className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md border border-emerald-200 transition-colors shadow-sm"
-                          title="Resolve: Mark as Worked"
+                          title="Mark as Worked"
                         >
                           <CheckSquare className="w-4 h-4" />
                         </button>

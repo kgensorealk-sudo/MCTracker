@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, Upload, FileSpreadsheet, AlertTriangle, FileText } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertTriangle, FileText, CheckCircle } from 'lucide-react';
 
 interface BulkImportModalProps {
   onImport: (manuscripts: Manuscript[]) => void;
   onClose: () => void;
+  existingManuscripts: Manuscript[];
 }
 
-const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) => {
+const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, existingManuscripts }) => {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const parseDate = (dateStr?: string): string | null => {
     if (!dateStr || !dateStr.trim()) return null;
@@ -19,6 +21,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) 
 
   const processImport = () => {
     setError(null);
+    setSuccessMsg(null);
     if (!text.trim()) {
       setError("Please paste some data first.");
       return;
@@ -27,7 +30,12 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) 
     try {
       const lines = text.trim().split('\n');
       const newManuscripts: Manuscript[] = [];
-      let successCount = 0;
+      let skippedCount = 0;
+      
+      // Create a Set of existing IDs for fast lookup (case-insensitive)
+      const existingIds = new Set(existingManuscripts.map(m => m.manuscriptId.toLowerCase()));
+      // Also track IDs being added in this batch to prevent duplicates within the paste itself
+      const currentBatchIds = new Set<string>();
 
       // Skip header if detected
       const firstLineLower = lines[0].toLowerCase();
@@ -46,6 +54,13 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) 
         // Mapping based on: Job Name | Due Date | Date Sent | Date Returned | Remarks
         const jobName = parts[0]?.trim();
         if (!jobName) continue;
+
+        // DUPLICATE CHECK
+        const lowerJobName = jobName.toLowerCase();
+        if (existingIds.has(lowerJobName) || currentBatchIds.has(lowerJobName)) {
+          skippedCount++;
+          continue;
+        }
 
         const dueDateStr = parts[1]?.trim();
         const dateSentStr = parts[2]?.trim();
@@ -106,16 +121,29 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) 
         }
 
         newManuscripts.push(manuscript);
-        successCount++;
+        currentBatchIds.add(lowerJobName);
       }
 
-      if (successCount === 0) {
+      if (newManuscripts.length === 0 && skippedCount === 0) {
         setError("No valid rows found. Please ensure you are pasting directly from Excel/Sheets with 'Job Name' as the first column.");
         return;
       }
 
+      if (newManuscripts.length === 0 && skippedCount > 0) {
+        setError(`All ${skippedCount} items were duplicates and skipped.`);
+        return;
+      }
+
+      // If we have valid items, perform import
       onImport(newManuscripts);
+      
+      // If some were skipped, alert the user but close on success
+      if (skippedCount > 0) {
+        alert(`Imported ${newManuscripts.length} items. Skipped ${skippedCount} duplicates.`);
+      }
+      
       onClose();
+
     } catch (err) {
       console.error(err);
       setError("Failed to parse data. Please check the format.");
@@ -150,8 +178,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose }) 
             </div>
             <p className="mt-2 text-blue-600 text-xs">
               * "Job Name" maps to Manuscript ID & Journal.<br/>
+              * <strong>Duplicates:</strong> Rows with existing Manuscript IDs will be skipped automatically.<br/>
               * "Date Returned" determines if status is 'Worked'.<br/>
-              * "Remarks" containing 'URGENT' sets urgent priority. "PRIORITY" keyword is ignored.
+              * "Remarks" containing 'URGENT' sets urgent priority.
             </p>
           </div>
 

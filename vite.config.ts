@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({}) => {
   return {
     plugins: [react()],
-    base: './', // Allows the app to run from a local file path (file://) after building
+    // base: './', // Removed for Vercel deployment to ensure correct asset loading from root
     server: {
       host: true, // Exposes the server to your local network (0.0.0.0)
       port: 5173, // Ensures the port remains consistent

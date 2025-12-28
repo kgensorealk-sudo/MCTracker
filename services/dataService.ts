@@ -115,6 +115,53 @@ export const dataService = {
     return mapToManuscript(data);
   },
 
+  async updateManuscripts(ids: string[], updates: Partial<Manuscript>) {
+    // Helper to apply updates
+    const applyUpdates = (original: Manuscript) => ({
+       ...original,
+       ...updates,
+       dateUpdated: new Date().toISOString(),
+       // If status changes, update status date
+       dateStatusChanged: (updates.status && updates.status !== original.status) 
+          ? new Date().toISOString() 
+          : original.dateStatusChanged
+    });
+
+    if (!isSupabaseConfigured) {
+      const current = await this.getManuscripts();
+      const updated = current.map((item: Manuscript) => 
+        ids.includes(item.id) ? applyUpdates(item) : item
+      );
+      localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("User not authenticated");
+
+    // Prepare DB object
+    // Note: We can't use the smart logic inside mapToManuscript for bulk updates easily via SQL
+    // so we assume the caller has set dateStatusChanged/completedDate correctly in 'updates' 
+    // OR we just update the fields provided.
+    
+    // Convert camelCase updates to snake_case for DB
+    const dbUpdates: any = {
+       date_updated: new Date().toISOString()
+    };
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.priority) dbUpdates.priority = updates.priority;
+    if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
+    if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
+    
+    const { error } = await supabase
+      .from('manuscripts')
+      .update(dbUpdates)
+      .in('id', ids)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+  },
+
   async deleteManuscript(id: string) {
     if (!isSupabaseConfigured) {
       const current = await this.getManuscripts();
