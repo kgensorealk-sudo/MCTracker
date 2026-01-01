@@ -11,6 +11,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
 import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
+import { Analytics } from '@vercel/analytics/react';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -475,6 +476,8 @@ const App: React.FC = () => {
           onClose={() => setIsDevOpen(false)}
         />
       )}
+
+      <Analytics />
     </div>
   );
 };
