@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ReferenceLine, ComposedChart, Line, Cell } from 'recharts';
+import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Line, Cell } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map, Info, Trophy, Star, Mail, AlertTriangle, Timer, Shield, Flame, ClipboardList, Clock, Target } from 'lucide-react';
+import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, BarChart3, Coffee, Settings, Briefcase, Info, Trophy, Mail, AlertTriangle, Timer, Flame, Clock, Target } from 'lucide-react';
 import { calculateXP, calculateLevel } from '../services/gamification';
 
 interface DashboardProps {
@@ -876,13 +876,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                </div>
                
                {/* Smart Coaching Message */}
-               <div className={`hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl border ${
+               <div className={`hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl border max-w-md ${
                   coachingMessage.type === 'success' ? 'bg-emerald-50 border-emerald-100' :
                   coachingMessage.type === 'warning' ? 'bg-amber-50 border-amber-100' :
                   coachingMessage.type === 'danger' ? 'bg-rose-50 border-rose-100' :
                   'bg-blue-50 border-blue-100'
                }`}>
-                  <div className={`p-1.5 rounded-full ${
+                  <div className={`p-1.5 rounded-full shrink-0 ${
                       coachingMessage.type === 'success' ? 'bg-emerald-200 text-emerald-700' :
                       coachingMessage.type === 'warning' ? 'bg-amber-200 text-amber-700' :
                       coachingMessage.type === 'danger' ? 'bg-rose-200 text-rose-700' :
@@ -890,14 +890,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                   }`}>
                      <Info className="w-3 h-3" />
                   </div>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col min-w-0">
                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
                         coachingMessage.type === 'success' ? 'text-emerald-800' :
                         coachingMessage.type === 'warning' ? 'text-amber-800' :
                         coachingMessage.type === 'danger' ? 'text-rose-800' :
                         'text-blue-800'
                      }`}>{coachingMessage.title}</span>
-                     <span className="text-xs text-slate-700 font-medium max-w-[250px] truncate animate-fade-in">
+                     <span className="text-xs text-slate-700 font-medium animate-fade-in break-words whitespace-normal">
                         {activeMsg}
                      </span>
                   </div>
@@ -951,9 +951,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                         fill="url(#colorCompleted)" 
                         connectNulls
                      />
-                     
-                     {/* Current Day Reference Line */}
-                     {/* <ReferenceLine x={trendData.find(d => !d.isFuture)?.date} stroke="#f43f5e" strokeDasharray="3 3" /> */}
                   </ComposedChart>
                </ResponsiveContainer>
             </div>

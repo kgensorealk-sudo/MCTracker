@@ -10,7 +10,7 @@ import HistoryReport from './components/HistoryReport';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History, WifiOff } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
@@ -38,13 +38,35 @@ const App: React.FC = () => {
 
   // Auth & Initial Load
   useEffect(() => {
+    // OFFLINE MODE: If no Supabase config, mock a session to allow local usage
     if (!isSupabaseConfigured) {
+      console.log('App running in Offline Mode (LocalStorage)');
+      setSession({
+        access_token: 'offline_token',
+        refresh_token: 'offline_refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+        user: {
+          id: 'offline-user',
+          aud: 'authenticated',
+          role: 'authenticated',
+          email: 'guest@local.dev',
+          app_metadata: { provider: 'email' },
+          user_metadata: { full_name: 'Guest Analyst' },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      } as Session);
       setLoading(false);
       return;
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setLoading(false);
+    }).catch(err => {
+      console.error("Supabase auth error:", err);
+      // In case of network error, we could fall back to offline, but for now just stop loading
       setLoading(false);
     });
 
@@ -59,7 +81,7 @@ const App: React.FC = () => {
 
   // Fetch Data when Session exists
   useEffect(() => {
-    if (session && isSupabaseConfigured) {
+    if (session) {
       loadData();
     }
   }, [session]);
@@ -79,7 +101,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error loading data:", error);
-      // alert("Failed to load data. Please check your connection.");
+      // Ensure we don't crash on error
     } finally {
       setDataLoading(false);
     }
@@ -230,8 +252,6 @@ const App: React.FC = () => {
     setUserSchedule(schedule);
     dataService.updateSchedule(schedule).catch((err: any) => {
       console.error("Schedule sync failed:", err);
-      // Improved error detection logic is already inside updateSchedule via console.warn, 
-      // but alerting here ensures user visibility
       if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column') || err.message.includes('relation'))) {
          alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
       }
@@ -264,12 +284,16 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    } else {
+      // Just reload for local mode to reset
+      window.location.reload();
+    }
     setManuscripts([]);
   };
 
   // Construct data for the form.
-  // If in Bulk Review mode, we override status to WORKED and completedDate to Today
   const getEditingData = () => {
     if (!editingId) return undefined;
     const m = manuscripts.find(x => x.id === editingId);
@@ -279,8 +303,6 @@ const App: React.FC = () => {
        return {
          ...m,
          status: Status.WORKED,
-         // Default to now if not already set, or override? 
-         // User wants to "Mark as worked", so we pre-fill.
          completedDate: m.completedDate || new Date().toISOString(),
          dateStatusChanged: new Date().toISOString()
        };
@@ -290,32 +312,6 @@ const App: React.FC = () => {
 
   const user = session?.user;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Analyst';
-
-  if (!isSupabaseConfigured) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200 text-center animate-fade-in-up">
-          <div className="mx-auto bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-6 ring-8 ring-blue-50">
-            <Database className="w-8 h-8 text-blue-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800 mb-3">Setup Required</h1>
-          <p className="text-slate-600 mb-6 leading-relaxed">
-            Please connect your Supabase project to start tracking.
-          </p>
-          <div className="bg-slate-50 rounded-lg p-4 text-left text-sm font-mono text-slate-700 border border-slate-200 mb-6 overflow-x-auto shadow-inner">
-            <div className="flex items-center gap-2 mb-2 border-b border-slate-200 pb-2">
-               <span className="font-semibold text-slate-500">.env</span>
-            </div>
-            <p className="whitespace-nowrap">VITE_SUPABASE_URL=...</p>
-            <p className="whitespace-nowrap">VITE_SUPABASE_ANON_KEY=...</p>
-          </div>
-          <p className="text-xs text-slate-400">
-            Configure these variables in your project settings.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   if (loading) {
     return (
@@ -343,6 +339,11 @@ const App: React.FC = () => {
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
             {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
+            {!isSupabaseConfigured && (
+              <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-600 ml-2" title="Data is saved to your browser (LocalStorage)">
+                 <WifiOff className="w-3 h-3" /> Offline Mode
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-4">
@@ -416,7 +417,7 @@ const App: React.FC = () => {
               <button
                 onClick={handleSignOut}
                 className="bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow"
-                title="Sign Out"
+                title={isSupabaseConfigured ? "Sign Out" : "Reset Demo"}
               >
                 <LogOut className="w-4 h-4" />
               </button>

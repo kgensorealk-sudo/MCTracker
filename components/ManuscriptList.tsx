@@ -120,6 +120,33 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
+  // --- Quick Action Handlers ---
+  const handleQuickAction = (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => {
+    const now = new Date().toISOString();
+    const updates: Partial<Manuscript> = {
+      dateStatusChanged: now
+    };
+
+    if (action === 'WORKED') {
+      updates.status = Status.WORKED;
+      updates.completedDate = now;
+
+      // Add Note Logic
+      const noteContent = m.status === Status.PENDING_JM ? "Resolved" : "Done";
+      const newNote = {
+        id: crypto.randomUUID(),
+        content: noteContent,
+        timestamp: Date.now()
+      };
+      updates.notes = [newNote, ...(m.notes || [])];
+
+    } else if (action === 'QUERY_JM') {
+      updates.status = Status.PENDING_JM;
+    }
+
+    onUpdate(m.id, updates);
+  };
+
   const downloadCSV = () => {
     const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
     const rows = filtered.map(m => {
@@ -458,23 +485,29 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex justify-end items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       
-                      {/* Resolve/Complete Button */}
-                      {([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED, Status.UNTOUCHED].includes(m.status)) && (
-                        <button 
-                          onClick={() => {
-                             // Customize message based on status
-                             const msg = m.status === Status.UNTOUCHED 
-                               ? 'Mark this item as Completed (Worked)?'
-                               : 'Mark this query as resolved (Worked)?';
-                            if (window.confirm(msg)) {
-                              onUpdate(m.id, { status: Status.WORKED });
-                            }
-                          }}
-                          className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all shadow-sm hover:shadow"
-                          title="Mark as Worked"
-                        >
-                          <CheckSquare className="w-4 h-4" />
-                        </button>
+                      {/* Quick Action Buttons */}
+                      {m.status !== Status.WORKED && (
+                        <>
+                          {/* Query Button - Only show for Untouched or other Pending types that aren't JM yet */}
+                          {m.status !== Status.PENDING_JM && (
+                            <button
+                              onClick={() => handleQuickAction(m, 'QUERY_JM')}
+                              className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-all shadow-sm hover:shadow"
+                              title="Query to JM"
+                            >
+                              <AlertCircle className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Mark Worked Button */}
+                          <button
+                            onClick={() => handleQuickAction(m, 'WORKED')}
+                            className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all shadow-sm hover:shadow"
+                            title={m.status === Status.PENDING_JM ? "Mark Resolved" : "Mark Done"}
+                          >
+                            <CheckSquare className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
 
                       <button 
