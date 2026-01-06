@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ReferenceLine, ComposedChart, Line, Cell } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Calendar, Zap, Inbox, CalendarX, TrendingUp, Activity, MoreHorizontal, BarChart3, Coffee, Settings, Briefcase, Map, Info, Trophy, Star, Mail, AlertTriangle, Timer, Shield, Flame, ClipboardList, Clock, Target } from 'lucide-react';
+import { calculateXP, calculateLevel } from '../services/gamification';
 
 interface DashboardProps {
   userName: string;
@@ -26,11 +27,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return (
       <div className="bg-white/95 backdrop-blur-sm p-3 border border-slate-100 shadow-xl rounded-lg text-xs">
         <p className="font-semibold text-slate-700 mb-1">{label}</p>
-        <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: payload[0].fill }}></div>
-            <span className="text-slate-500">{payload[0].name}:</span>
-            <span className="font-bold text-slate-800">{payload[0].value}</span>
-        </div>
+        {payload.map((p: any, idx: number) => (
+          <div key={idx} className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }}></div>
+              <span className="text-slate-500 capitalize">{p.name}:</span>
+              <span className="font-bold text-slate-800">{p.value}</span>
+          </div>
+        ))}
       </div>
     );
   }
@@ -147,7 +150,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // --- Statistics Logic (Both Overall and Cycle) ---
   const stats = useMemo(() => {
-    // Access directly to avoid unused variable warning if destructuring triggers it falsely
     const inCycle = (dateStr?: string) => {
       if (!dateStr) return false;
       const d = new Date(dateStr);
@@ -180,6 +182,13 @@ const Dashboard: React.FC<DashboardProps> = ({
       inCycle(m.dateStatusChanged || m.dateUpdated)
     ).length;
 
+    // Breakdown for Pending Stat Card
+    const pendingBreakdown = {
+       JM: manuscripts.filter(m => m.status === Status.PENDING_JM).length,
+       TL: manuscripts.filter(m => m.status === Status.PENDING_TL).length,
+       CED: manuscripts.filter(m => m.status === Status.PENDING_CED).length
+    };
+
     return {
       totalFiles,
       totalWorked,
@@ -188,12 +197,73 @@ const Dashboard: React.FC<DashboardProps> = ({
       cycleReceived,
       cycleWorked,
       cycleUntouched,
-      cyclePending
+      cyclePending,
+      pendingBreakdown
     };
   }, [manuscripts, cycleDates]);
 
+  // --- Efficiency Insights & Urgent Watchlist ---
+  const { insights, urgentItems, recentActivity } = useMemo(() => {
+    // 1. Efficiency Insights
+    const worked = manuscripts.filter(m => m.status === Status.WORKED);
+    
+    // Turnaround Time
+    let avgTat = "0.0";
+    if (worked.length > 0) {
+        const totalDays = worked.reduce((acc, m) => {
+            const start = new Date(m.dateReceived).getTime();
+            const end = new Date(m.completedDate || m.dateStatusChanged || Date.now()).getTime();
+            const diff = Math.max(0, (end - start) / (1000 * 3600 * 24));
+            return acc + diff;
+        }, 0);
+        avgTat = (totalDays / worked.length).toFixed(1);
+    }
+
+    // Streak Logic
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 30; i++) {
+        const checkDate = new Date();
+        checkDate.setDate(today.getDate() - i);
+        const dateStr = getLocalISODate(checkDate);
+        
+        const hasWork = manuscripts.some(m => {
+             if (m.status !== Status.WORKED) return false;
+             const d = m.completedDate || m.dateStatusChanged;
+             return d && getLocalISODate(new Date(d)) === dateStr;
+        });
+
+        if (hasWork) streak++;
+        else if (i === 0) continue; 
+        else break; 
+    }
+
+    // 2. Urgent Watchlist
+    const urgent = manuscripts
+        .filter(m => m.status !== Status.WORKED && m.priority === 'Urgent')
+        .sort((a, b) => new Date(a.dateReceived).getTime() - new Date(b.dateReceived).getTime())
+        .slice(0, 3);
+
+    // 3. Recent Activity (Last 5 modified)
+    const recent = [...manuscripts]
+        .sort((a, b) => new Date(b.dateUpdated).getTime() - new Date(a.dateUpdated).getTime())
+        .slice(0, 5);
+
+    return { 
+        insights: { tat: avgTat, streak },
+        urgentItems: urgent,
+        recentActivity: recent
+    };
+  }, [manuscripts]);
+
+  // --- Gamification Logic ---
+  const levelData = useMemo(() => {
+     const xp = calculateXP(manuscripts, target);
+     return calculateLevel(xp);
+  }, [manuscripts, target]);
+
   const cycleData = useMemo(() => {
-    const { endDate, cycleLabel } = cycleDates;
+    const { endDate, startDate, cycleLabel } = cycleDates;
     const d = new Date();
 
     const percentage = Math.min(100, Math.round((stats.cycleWorked / target) * 100));
@@ -205,28 +275,39 @@ const Dashboard: React.FC<DashboardProps> = ({
     let weightedDaysLeft = 0;
     const itrDate = new Date(tempToday);
     
-    // We iterate until endDate
     while (itrDate <= endDate) {
         const isoDate = getLocalISODate(itrDate);
-        const dayOfWeek = itrDate.getDay(); // 0 = Sun, 6 = Sat
-        
-        // If it's a manual day off, weight is 0
+        const dayOfWeek = itrDate.getDay(); 
         if (!userSchedule.daysOff.includes(isoDate)) {
-           // Otherwise add the weight for this day of week
            weightedDaysLeft += (weights[dayOfWeek] ?? 1);
         }
-        
         itrDate.setDate(itrDate.getDate() + 1);
     }
     
-    const calendarDaysLeft = Math.max(1, Math.ceil((endDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
+    // Projected Finish Logic
+    let projectedFinishStr = "N/A";
+    const daysElapsed = Math.max(1, Math.ceil((d.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+    if (stats.cycleWorked > 0) {
+       const velocity = stats.cycleWorked / daysElapsed; // Items per day
+       const remaining = Math.max(0, target - stats.cycleWorked);
+       if (remaining === 0) {
+          projectedFinishStr = "Done";
+       } else {
+          const daysToFinish = Math.ceil(remaining / velocity);
+          const finishDate = new Date();
+          finishDate.setDate(finishDate.getDate() + daysToFinish);
+          projectedFinishStr = finishDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+       }
+    } else if (stats.cycleWorked === 0) {
+       projectedFinishStr = "Start working...";
+    }
 
     return {
       label: cycleLabel,
       completed: stats.cycleWorked,
       percentage,
-      calendarDaysLeft,
-      weightedDaysLeft, // This represents "Full Work Day Equivalents" remaining
+      weightedDaysLeft,
+      projectedFinishStr,
       endDateStr: endDate.toLocaleString('default', { month: 'short', day: 'numeric' })
     };
   }, [manuscripts, target, userSchedule, cycleDates, stats.cycleWorked]);
@@ -245,30 +326,22 @@ const Dashboard: React.FC<DashboardProps> = ({
     const completedPriorToTodayInCycle = Math.max(0, cycleData.completed - todayCount);
     const remainingForCycleFromStartOfDay = Math.max(0, target - completedPriorToTodayInCycle);
     
-    // Safety against division by zero
     const effectiveDivisor = Math.max(0.1, cycleData.weightedDaysLeft);
-    
-    // The "Base Unit" is what a 100% day looks like
     const baseDailyTarget = remainingForCycleFromStartOfDay / effectiveDivisor;
-    
-    // Today's specific target is Base Unit * Today's Weight
     const todayWeight = weights[d.getDay()] ?? 1;
     let safeDailyTarget = Math.ceil(baseDailyTarget * todayWeight);
 
-    // If today is manually marked off, override to 0
     const isoToday = getLocalISODate(d);
     if (userSchedule.daysOff.includes(isoToday)) {
       safeDailyTarget = 0;
     }
 
-    // Cap logic
     if (safeDailyTarget > remainingForCycleFromStartOfDay) safeDailyTarget = remainingForCycleFromStartOfDay;
     if (cycleData.completed >= target) safeDailyTarget = 0;
 
     const remainingToday = Math.max(0, safeDailyTarget - todayCount);
     const percentage = safeDailyTarget > 0 ? Math.min(100, Math.round((todayCount / safeDailyTarget) * 100)) : 100;
     
-    // Message logic moved to Coach block
     const isDayOff = userSchedule.daysOff.includes(isoToday) || todayWeight === 0;
 
     return { 
@@ -277,7 +350,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       remaining: remainingToday, 
       percentage, 
       isDayOff,
-      baseDailyTarget // The "Ideal" average needed per full day
+      baseDailyTarget
     };
   }, [manuscripts, target, cycleData, userSchedule, userName]);
 
@@ -286,15 +359,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     const { endDate } = cycleDates;
     const remainingToTarget = Math.max(0, target - stats.cycleWorked);
     
-    // 1. Forecast Calculation (Starting Tomorrow)
     const forecastDays = [];
     const itrDate = new Date();
-    itrDate.setDate(itrDate.getDate() + 1); // Start tomorrow
+    itrDate.setDate(itrDate.getDate() + 1);
     itrDate.setHours(0,0,0,0);
 
     let futureWeightedDays = 0;
     
-    // First pass: Calculate total future weights
     const tempItr = new Date(itrDate);
     while (tempItr <= endDate) {
         const isoDate = getLocalISODate(tempItr);
@@ -305,11 +376,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         tempItr.setDate(tempItr.getDate() + 1);
     }
 
-    // Base unit for future
     const safeFutureDivisor = Math.max(0.1, futureWeightedDays);
     const futureBaseUnit = remainingToTarget / safeFutureDivisor;
 
-    // Second pass: Build Forecast Data
     while (itrDate <= endDate) {
        const isoDate = getLocalISODate(itrDate);
        const dayOfWeek = itrDate.getDay();
@@ -321,7 +390,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           dayTarget = Math.ceil(futureBaseUnit * weight);
        }
 
-       // Don't show if target is reached
        if (remainingToTarget <= 0) dayTarget = 0;
 
        forecastDays.push({
@@ -336,22 +404,18 @@ const Dashboard: React.FC<DashboardProps> = ({
        itrDate.setDate(itrDate.getDate() + 1);
     }
 
-    // 2. Coaching Message Logic
-    
     const itemsLeft = Math.max(0, target - stats.cycleWorked);
-    // Calculate average needed per remaining "Work Day"
     const avgNeededPerWorkDay = cycleData.weightedDaysLeft > 0 
         ? (itemsLeft / cycleData.weightedDaysLeft) 
         : itemsLeft; 
 
-    // Determine Pace status
     const idealDailyPace = Math.max(1, target / 15);
     const isBehind = avgNeededPerWorkDay > (idealDailyPace * 1.2); 
     const isWayBehind = avgNeededPerWorkDay > (idealDailyPace * 1.6); 
     
     let title = "";
     let messages: string[] = [];
-    let type: "success" | "warning" | "neutral" | "danger" = "neutral";
+    let type: "success" | "warning" | "neutral" | "danger" | "info" = "neutral";
     
     const remainingToday = dailyStats.remaining;
     const countToday = dailyStats.count;
@@ -376,7 +440,7 @@ const Dashboard: React.FC<DashboardProps> = ({
          type = "success";
        } else {
          messages = [
-            "Though it is your day off, it would be great if you can finish at least 5 items today so the following day will be less hustle.",
+            "Though it is your day off, it would be great if you can finish at least 5 items today.",
             "Rest is productive too. Come back stronger tomorrow.",
             "Enjoy the break! A fresh mind works faster."
          ];
@@ -398,7 +462,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              "Pushing further will be great to build a safety buffer.",
              "Just a final sprint to clear today's quota!"
           ];
-          type = "warning"; // Encouraging yellow
+          type = "warning";
        } else if (isWayBehind) {
           title = "Heavy Lifting";
           messages = [
@@ -408,7 +472,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             "Consider prioritizing the easiest files first to build momentum."
           ];
           type = "danger";
-       } else if (isBehind || remainingToday > 0) {
+       } else if (isBehind) {
           title = "Let's Catch Up";
           messages = [
              `We need ${remainingToday} more today to stay on track.`,
@@ -416,22 +480,21 @@ const Dashboard: React.FC<DashboardProps> = ({
              `Aim for about ${avgNeeded} items each subsequent day to smooth out the load.`,
              `Achieve at least ${dailyStats.target} files today to keep the pace.`
           ];
-          type = isBehind ? "danger" : "neutral";
+          type = "danger";
        } else {
-          // Fallback / Early day
-          title = "Good Start";
+          // On Track
+          title = "On Track";
           messages = [
-             "You are on track. Keep the rhythm going.",
-             `Aim for ${remainingToday} more to stay ahead of the curve.`,
-             "Consistency is key. You've got this."
+             `You're doing great! Just ${remainingToday} more to hit today's goal.`,
+             "Pace is looking good. Keep this rhythm going.",
+             `Steady progress. Finish ${remainingToday} more to bank a perfect day.`,
+             "You're right where you need to be. Keep it up!"
           ];
-          type = "success";
+          type = "info";
        }
     }
     
-    // Pick 3 random unique messages
     const displayMessages = messages.length > 3 ? pickRandom(messages, 3) : messages;
-
     return { forecast: forecastDays, coachingMessage: { title, messages: displayMessages, type } };
 
   }, [stats.cycleWorked, target, cycleDates, userSchedule, weights, dailyStats]);
@@ -452,27 +515,82 @@ const Dashboard: React.FC<DashboardProps> = ({
     onUpdateSchedule({ ...userSchedule, weeklyWeights: newWeights });
   };
 
-  const pieData = [
-    { name: 'Worked', value: stats.totalWorked },
-    { name: 'Untouched', value: stats.totalUntouched },
-    { name: 'Pending', value: stats.totalPending },
-  ].filter(d => d.value > 0);
+  // --- CHART DATA PREPARATION ---
 
+  // 1. Burn-up Chart Data (Trend)
+  const trendData = useMemo(() => {
+     const data = [];
+     const { startDate, endDate } = cycleDates;
+     const now = new Date();
+     
+     const iterDate = new Date(startDate);
+     const stopDate = new Date(endDate);
+     stopDate.setHours(23,59,59,999);
+     
+     let cumulativeCompleted = 0;
+     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24));
+     const idealPerDay = target / totalDays;
+
+     let dayIndex = 0;
+
+     while (iterDate <= stopDate) {
+        const dateStr = getLocalISODate(iterDate);
+        const displayDate = iterDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        
+        const dailyCompleted = manuscripts.filter(m => {
+           if (m.status !== Status.WORKED) return false;
+           const dRaw = m.completedDate || m.dateStatusChanged || m.dateUpdated;
+           if (!dRaw) return false;
+           const d = new Date(dRaw);
+           return getLocalISODate(d) === dateStr;
+        }).length;
+
+        cumulativeCompleted += dailyCompleted;
+
+        const ideal = Math.min(target, Math.round(idealPerDay * (dayIndex + 1)));
+        
+        if (iterDate <= now || getLocalISODate(iterDate) === getLocalISODate(now)) {
+           data.push({
+             date: displayDate,
+             completed: cumulativeCompleted,
+             ideal: ideal,
+             isFuture: false
+           });
+        } else {
+           data.push({
+             date: displayDate,
+             ideal: ideal,
+             isFuture: true
+           });
+        }
+
+        iterDate.setDate(iterDate.getDate() + 1);
+        dayIndex++;
+     }
+     return data;
+  }, [manuscripts, cycleDates, target]);
+
+  // 2. Daily Activity Data (Bar Chart)
   const activityData = useMemo(() => {
     const days = 7;
     const data = [];
     for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = getLocalISODate(date);
+      const dateIterator = new Date();
+      dateIterator.setDate(dateIterator.getDate() - i);
       
       const count = manuscripts.filter(m => {
-         const d = (m.status === Status.WORKED && m.completedDate) 
-            ? m.completedDate 
-            : (m.dateStatusChanged || m.dateUpdated);
-         return d.startsWith(dateStr);
+         if (m.status !== Status.WORKED) return false;
+
+         const dRaw = m.completedDate || m.dateStatusChanged || m.dateUpdated;
+         if (!dRaw) return false;
+         
+         const mDate = new Date(dRaw);
+         return mDate.getDate() === dateIterator.getDate() &&
+                mDate.getMonth() === dateIterator.getMonth() &&
+                mDate.getFullYear() === dateIterator.getFullYear();
       }).length;
-      data.push({ date: date.toLocaleDateString('en-US', { weekday: 'short' }), count });
+      
+      data.push({ date: dateIterator.toLocaleDateString('en-US', { weekday: 'short' }), count });
     }
     return data;
   }, [manuscripts]);
@@ -484,22 +602,49 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6 animate-fade-in-up pb-12">
       
-      {/* Header with Date */}
-      <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center border-b border-slate-200 pb-4">
-        <div>
-           <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard</h2>
-           <div className="flex items-center gap-2 mt-1">
-              <p className="text-slate-500 text-sm">Overview of your productivity and workflow</p>
-              <button 
-                onClick={() => setShowScheduleSettings(!showScheduleSettings)}
-                className={`text-xs px-2 py-0.5 rounded-md border transition-colors flex items-center gap-1 ${showScheduleSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-indigo-600'}`}
-              >
-                <Settings className="w-3 h-3" />
-                {showScheduleSettings ? 'Close Settings' : 'Smart Pacing'}
-              </button>
+      {/* Header with Date & Level Banner */}
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center">
+          <div>
+             <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard</h2>
+             <div className="flex items-center gap-2 mt-1">
+                <p className="text-slate-500 text-sm">Overview of your productivity and workflow</p>
+                <button 
+                  onClick={() => setShowScheduleSettings(!showScheduleSettings)}
+                  className={`text-xs px-2 py-0.5 rounded-md border transition-colors flex items-center gap-1 ${showScheduleSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-indigo-600'}`}
+                >
+                  <Settings className="w-3 h-3" />
+                  {showScheduleSettings ? 'Close Settings' : 'Smart Pacing'}
+                </button>
+             </div>
+          </div>
+          <HeaderClock />
+        </div>
+
+        {/* Level Banner */}
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-3 flex items-center gap-4 text-white shadow-md relative overflow-hidden">
+           <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
+              <Trophy className="w-24 h-24" />
+           </div>
+           
+           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold border-2 border-slate-700 shadow-lg shrink-0 z-10">
+              {levelData.level}
+           </div>
+           <div className="flex-1 z-10">
+              <div className="flex justify-between items-end mb-1">
+                 <div>
+                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Current Rank</span>
+                    <h3 className="font-bold text-sm leading-tight text-indigo-300">{levelData.title}</h3>
+                 </div>
+                 <span className="text-xs font-mono text-slate-400">
+                    {levelData.currentXP} <span className="text-slate-600">/</span> {levelData.nextLevelXP} XP
+                 </span>
+              </div>
+              <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                 <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-1000" style={{ width: `${levelData.progressPercent}%` }}></div>
+              </div>
            </div>
         </div>
-        <HeaderClock />
       </div>
 
       {showScheduleSettings && (
@@ -518,363 +663,431 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
              </div>
              
-             <div className="mt-3 grid grid-cols-2 gap-3">
-                {/* Saturday Control */}
-                <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-sm">
-                   <span className="text-xs font-bold text-indigo-900 block mb-2">Saturdays</span>
-                   <div className="flex gap-1">
-                      {[1, 0.5, 0].map((w) => (
-                        <button
-                          key={w}
-                          onClick={() => updateWeeklyWeight(6, w)}
-                          className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                            weights[6] === w 
-                              ? 'bg-indigo-600 text-white shadow-md' 
-                              : 'bg-indigo-50 text-indigo-400 hover:bg-indigo-100'
-                          }`}
-                        >
-                          {w === 1 ? 'FULL' : w === 0.5 ? 'LIGHT' : 'OFF'}
-                        </button>
-                      ))}
-                   </div>
-                </div>
-
-                {/* Sunday Control */}
-                <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-sm">
-                   <span className="text-xs font-bold text-indigo-900 block mb-2">Sundays</span>
-                   <div className="flex gap-1">
-                      {[1, 0.5, 0].map((w) => (
-                        <button
-                          key={w}
-                          onClick={() => updateWeeklyWeight(0, w)}
-                          className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                            weights[0] === w 
-                              ? 'bg-indigo-600 text-white shadow-md' 
-                              : 'bg-indigo-50 text-indigo-400 hover:bg-indigo-100'
-                          }`}
-                        >
-                          {w === 1 ? 'FULL' : w === 0.5 ? 'LIGHT' : 'OFF'}
-                        </button>
-                      ))}
-                   </div>
-                </div>
+             <div className="mt-3 grid grid-cols-7 gap-1 sm:gap-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
+                  const weight = weights[idx] ?? 1;
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => updateWeeklyWeight(idx, weight === 1 ? 0 : 1)}
+                      className={`py-2 rounded-lg text-[10px] sm:text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                         weight > 0 
+                          ? 'bg-white border-indigo-200 text-indigo-700 shadow-sm' 
+                          : 'bg-indigo-100/50 border-indigo-100 text-indigo-300'
+                      }`}
+                    >
+                      <span>{day}</span>
+                      <span className={`w-2 h-2 rounded-full ${weight > 0 ? 'bg-emerald-400' : 'bg-slate-300'}`}></span>
+                    </button>
+                  )
+                })}
              </div>
            </div>
 
-           {/* Today Control */}
+           {/* Toggle Today */}
            <div className="flex flex-col gap-2">
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-indigo-100 rounded-xl shrink-0">
-                  <CalendarX className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div>
-                   <h4 className="text-sm font-bold text-indigo-900">Single Day Off</h4>
-                   <p className="text-xs text-indigo-700 mt-1">
-                     Mark today as a rest day without changing your weekly routine.
-                   </p>
-                </div>
+                 <div className="p-2 bg-pink-100 rounded-xl shrink-0">
+                   <Coffee className="w-5 h-5 text-pink-600" />
+                 </div>
+                 <div className="flex-1">
+                    <h4 className="text-sm font-bold text-pink-900">Instant Day Off</h4>
+                    <p className="text-xs text-pink-700 mt-1">
+                      Taking a break today? Toggle this to pause your daily target.
+                    </p>
+                 </div>
+                 <button
+                   onClick={toggleTodayOff}
+                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 ${
+                     dailyStats.isDayOff ? 'bg-pink-600' : 'bg-slate-200'
+                   }`}
+                 >
+                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      dailyStats.isDayOff ? 'translate-x-6' : 'translate-x-1'
+                   }`} />
+                 </button>
               </div>
-              <button 
-                onClick={toggleTodayOff} 
-                className={`mt-3 w-full py-3 px-3 text-xs font-bold rounded-xl border transition-all flex items-center justify-center gap-2 ${
-                  userSchedule.daysOff.includes(getLocalISODate(new Date()))
-                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' 
-                  : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:shadow-sm'
-                }`}
-              >
-                 {userSchedule.daysOff.includes(getLocalISODate(new Date())) ? 'ON BREAK (Click to Work)' : 'MARK TODAY OFF'}
-              </button>
+
+              {/* Quick Target Edit */}
+              <div className="mt-auto pt-4 border-t border-indigo-200/50 flex items-center justify-between">
+                 <span className="text-xs font-bold text-indigo-800">Cycle Goal:</span>
+                 <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => onUpdateTarget(Math.max(1, target - 5))}
+                      className="w-6 h-6 rounded bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold"
+                    >-</button>
+                    <span className="text-sm font-mono font-bold w-8 text-center">{target}</span>
+                    <button 
+                      onClick={() => onUpdateTarget(target + 5)}
+                      className="w-6 h-6 rounded bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold"
+                    >+</button>
+                 </div>
+              </div>
            </div>
         </div>
       )}
 
-      {/* Stats Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total Files" 
-          value={stats.totalFiles} 
-          cycleValue={stats.cycleReceived}
-          cycleLabel="Received this cycle"
-          icon={<FileText className="w-5 h-5" />} 
-          color="bg-blue-600"
-          trend="All Time"
-          onClick={() => onFilterClick('ALL')}
-          delay="delay-100"
-        />
-        <StatCard 
-          title="Untouched" 
-          value={stats.totalUntouched} 
-          cycleValue={stats.cycleUntouched}
-          cycleLabel="untouched this cycle"
-          icon={<Inbox className="w-5 h-5" />} 
-          color="bg-slate-500"
-          trend="Needs Action"
-          onClick={() => onFilterClick(Status.UNTOUCHED)}
-          delay="delay-100"
-        />
-        <StatCard 
-          title="Pending" 
-          value={stats.totalPending} 
-          cycleValue={stats.cyclePending}
-          cycleLabel="Queried this cycle"
-          icon={<AlertCircle className="w-5 h-5" />} 
-          color="bg-rose-500"
-          trend="Queries"
-          onClick={() => onFilterClick('PENDING_GROUP')}
-          delay="delay-200"
-        />
-        <StatCard 
-          title="Completed" 
-          value={stats.totalWorked} 
-          cycleValue={stats.cycleWorked}
-          cycleLabel="Worked this cycle"
-          icon={<CheckCircle className="w-5 h-5" />} 
-          color="bg-emerald-500"
-          trend="Finished"
-          onClick={() => onFilterClick(Status.WORKED)}
-          delay="delay-200"
-        />
+      {/* Primary Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Cycle Progress Card */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Target className="w-16 h-16" />
+           </div>
+           <div className="flex justify-between items-start mb-2 relative z-10">
+              <div>
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cycle Progress</p>
+                 <p className="text-[10px] text-slate-400 mt-0.5">{cycleData.label}</p>
+              </div>
+              <div className={`text-xs font-bold px-2 py-0.5 rounded-full ${cycleData.percentage >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-50 text-blue-600'}`}>
+                 {cycleData.percentage}%
+              </div>
+           </div>
+           <div className="flex items-baseline gap-1 relative z-10">
+              <h3 className="text-3xl font-bold text-slate-800">{stats.cycleWorked}</h3>
+              <span className="text-sm text-slate-400 font-medium">/ {target}</span>
+           </div>
+           <div className="mt-3 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-1000 ${cycleData.percentage >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} 
+                style={{ width: `${cycleData.percentage}%` }}
+              ></div>
+           </div>
+           <div className="mt-2 flex justify-between text-[10px] text-slate-400 font-medium relative z-10">
+              <span>Ends {cycleData.endDateStr}</span>
+              <span>Proj: {cycleData.projectedFinishStr}</span>
+           </div>
+        </div>
+
+        {/* Daily Target Card */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Timer className="w-16 h-16" />
+           </div>
+           <div className="flex justify-between items-start mb-2 relative z-10">
+              <div>
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Today's Target</p>
+                 <p className="text-[10px] text-slate-400 mt-0.5">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</p>
+              </div>
+              {dailyStats.isDayOff && (
+                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">Day Off</span>
+              )}
+           </div>
+           
+           <div className="flex items-baseline gap-1 relative z-10">
+              <h3 className="text-3xl font-bold text-slate-800">{dailyStats.count}</h3>
+              <span className="text-sm text-slate-400 font-medium">/ {dailyStats.target}</span>
+           </div>
+
+           <div className="mt-3 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  dailyStats.count >= dailyStats.target ? 'bg-emerald-500' : 'bg-indigo-500'
+                }`} 
+                style={{ width: `${dailyStats.percentage}%` }}
+              ></div>
+           </div>
+           
+           <div className="mt-2 text-[10px] text-slate-500 font-medium relative z-10">
+              {dailyStats.remaining > 0 ? (
+                 <span className="text-indigo-600 font-bold">{dailyStats.remaining} more to go!</span>
+              ) : (
+                 <span className="text-emerald-600 font-bold">Daily goal crushed!</span>
+              )}
+           </div>
+        </div>
+
+        {/* Pending Card */}
+        <div 
+           onClick={() => onFilterClick('PENDING_GROUP')}
+           className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer hover:border-amber-200"
+        >
+           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <AlertTriangle className="w-16 h-16 text-amber-500" />
+           </div>
+           <div className="mb-2 relative z-10">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Actions</p>
+           </div>
+           <div className="flex items-center gap-2 mb-3 relative z-10">
+              <h3 className="text-3xl font-bold text-slate-800">{stats.totalPending}</h3>
+              {stats.cyclePending > 0 && <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">+{stats.cyclePending} new</span>}
+           </div>
+           <div className="grid grid-cols-3 gap-1 relative z-10">
+              <div className="text-center bg-rose-50 rounded p-1">
+                 <div className="text-xs font-bold text-rose-700">{stats.pendingBreakdown.JM}</div>
+                 <div className="text-[9px] text-rose-400 font-bold">JM</div>
+              </div>
+              <div className="text-center bg-amber-50 rounded p-1">
+                 <div className="text-xs font-bold text-amber-700">{stats.pendingBreakdown.TL}</div>
+                 <div className="text-[9px] text-amber-400 font-bold">TL</div>
+              </div>
+              <div className="text-center bg-violet-50 rounded p-1">
+                 <div className="text-xs font-bold text-violet-700">{stats.pendingBreakdown.CED}</div>
+                 <div className="text-[9px] text-violet-400 font-bold">CED</div>
+              </div>
+           </div>
+        </div>
+
+        {/* Insights Card */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Zap className="w-16 h-16 text-blue-500" />
+           </div>
+           <div className="mb-2 relative z-10">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Efficiency</p>
+           </div>
+           
+           <div className="space-y-3 relative z-10">
+              <div className="flex justify-between items-center">
+                 <span className="text-xs text-slate-500 font-medium">Avg Turnaround</span>
+                 <span className="text-sm font-bold text-slate-800">{insights.tat} <span className="text-[10px] text-slate-400 font-normal">days</span></span>
+              </div>
+              <div className="flex justify-between items-center">
+                 <span className="text-xs text-slate-500 font-medium">Active Streak</span>
+                 <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
+                    <Flame className="w-3 h-3 fill-orange-600" /> {insights.streak} <span className="text-[10px] text-slate-400 font-normal">days</span>
+                 </span>
+              </div>
+              <div className="flex justify-between items-center">
+                 <span className="text-xs text-slate-500 font-medium">Untouched</span>
+                 <span 
+                    className={`text-sm font-bold cursor-pointer hover:underline ${stats.totalUntouched > 10 ? 'text-red-600' : 'text-slate-800'}`}
+                    onClick={(e) => { e.stopPropagation(); onFilterClick(Status.UNTOUCHED); }}
+                 >
+                    {stats.totalUntouched} <span className="text-[10px] text-slate-400 font-normal">files</span>
+                 </span>
+              </div>
+           </div>
+        </div>
       </div>
 
-      {/* Goals Section */}
+      {/* Main Charts Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+         
+         {/* Trend Chart (Burn-up) */}
+         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm lg:col-span-2">
+            <div className="flex items-center justify-between mb-6">
+               <div>
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                     <TrendingUp className="w-5 h-5 text-blue-500" /> Cycle Trajectory
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">Actual completion vs Ideal pace to hit target</p>
+               </div>
+               
+               {/* Smart Coaching Message */}
+               <div className={`hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl border ${
+                  coachingMessage.type === 'success' ? 'bg-emerald-50 border-emerald-100' :
+                  coachingMessage.type === 'warning' ? 'bg-amber-50 border-amber-100' :
+                  coachingMessage.type === 'danger' ? 'bg-rose-50 border-rose-100' :
+                  'bg-blue-50 border-blue-100'
+               }`}>
+                  <div className={`p-1.5 rounded-full ${
+                      coachingMessage.type === 'success' ? 'bg-emerald-200 text-emerald-700' :
+                      coachingMessage.type === 'warning' ? 'bg-amber-200 text-amber-700' :
+                      coachingMessage.type === 'danger' ? 'bg-rose-200 text-rose-700' :
+                      'bg-blue-200 text-blue-700'
+                  }`}>
+                     <Info className="w-3 h-3" />
+                  </div>
+                  <div className="flex flex-col">
+                     <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                        coachingMessage.type === 'success' ? 'text-emerald-800' :
+                        coachingMessage.type === 'warning' ? 'text-amber-800' :
+                        coachingMessage.type === 'danger' ? 'text-rose-800' :
+                        'text-blue-800'
+                     }`}>{coachingMessage.title}</span>
+                     <span className="text-xs text-slate-700 font-medium max-w-[250px] truncate animate-fade-in">
+                        {activeMsg}
+                     </span>
+                  </div>
+               </div>
+            </div>
+
+            <div className="h-[280px] w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                     <defs>
+                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                           <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                     </defs>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                     <XAxis 
+                        dataKey="date" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                        interval="preserveStartEnd"
+                     />
+                     <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                     />
+                     <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                     
+                     {/* Ideal Line (Dashed) */}
+                     <Line 
+                        type="monotone" 
+                        dataKey="ideal" 
+                        name="Target Pace"
+                        stroke="#cbd5e1" 
+                        strokeWidth={2} 
+                        strokeDasharray="4 4" 
+                        dot={false} 
+                        activeDot={false}
+                     />
+
+                     {/* Actual Area */}
+                     <Area 
+                        type="monotone" 
+                        dataKey="completed" 
+                        name="Completed"
+                        stroke="#3b82f6" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorCompleted)" 
+                        connectNulls
+                     />
+                     
+                     {/* Current Day Reference Line */}
+                     {/* <ReferenceLine x={trendData.find(d => !d.isFuture)?.date} stroke="#f43f5e" strokeDasharray="3 3" /> */}
+                  </ComposedChart>
+               </ResponsiveContainer>
+            </div>
+         </div>
+
+         {/* Daily Activity (Bar) */}
+         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
+               <BarChart3 className="w-5 h-5 text-emerald-500" /> Last 7 Days
+            </h3>
+            <div className="flex-1 min-h-[200px]">
+               <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activityData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                     <XAxis 
+                        dataKey="date" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                     />
+                     <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                     />
+                     <Tooltip 
+                        cursor={{fill: '#f8fafc'}}
+                        content={({ active, payload, label }) => {
+                           if (active && payload && payload.length) {
+                              return (
+                                 <div className="bg-slate-900 text-white text-xs py-1 px-2 rounded">
+                                    <span className="font-bold">{payload[0].value}</span> files on {label}
+                                 </div>
+                              );
+                           }
+                           return null;
+                        }}
+                     />
+                     <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {activityData.map((entry, index) => (
+                           <Cell key={`cell-${index}`} fill={entry.count >= (dailyStats.baseDailyTarget || 5) ? '#10b981' : '#94a3b8'} />
+                        ))}
+                     </Bar>
+                  </BarChart>
+               </ResponsiveContainer>
+            </div>
+         </div>
+      </div>
+      
+      {/* Bottom Section: Watchlist & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Cycle Progress */}
-        <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl shadow-slate-900/10 relative overflow-hidden flex flex-col justify-between group transition-transform hover:-translate-y-1 duration-300 animate-fade-in-up delay-300">
-          <div className="absolute right-0 top-0 p-32 bg-indigo-600/20 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-600/30 transition-all duration-700"></div>
-          
-          <div className="relative z-10">
-             <div className="flex justify-between items-start mb-6">
-                <div>
-                  <div className="flex items-center gap-2 text-indigo-300 mb-1">
-                    <Calendar className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase tracking-widest">{cycleData.label}</span>
+         
+         {/* Urgent Watchlist */}
+         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-500" /> Urgent Watchlist
+               </h3>
+               {urgentItems.length > 0 && <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">{urgentItems.length} items</span>}
+            </div>
+            
+            <div className="space-y-3">
+               {urgentItems.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                     <CheckCircle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                     <p className="text-sm">No urgent items pending.</p>
                   </div>
-                  <h2 className="text-2xl font-bold">Cycle Goal</h2>
-                </div>
-                <div className="bg-white/10 px-3 py-1 rounded-xl backdrop-blur-md flex items-center gap-2 border border-white/10">
-                   <span className="text-xs text-indigo-200 font-bold uppercase">Target</span>
-                   <input 
-                    type="number" 
-                    value={target}
-                    onChange={(e) => onUpdateTarget(Math.max(1, Number(e.target.value)))}
-                    className="w-12 bg-transparent text-white font-bold text-center outline-none focus:border-b focus:border-indigo-400 transition-colors"
-                   />
-                </div>
-             </div>
-             
-             <div className="mb-6">
-                <div className="flex items-end gap-2 mb-2">
-                   <span className="text-5xl font-bold tracking-tighter">{cycleData.percentage}%</span>
-                   <span className="text-sm text-slate-400 mb-1.5">completed</span>
-                </div>
-                <div className="h-4 bg-slate-800 rounded-full overflow-hidden border border-slate-700 shadow-inner">
-                   <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full animate-pulse" style={{ width: `${cycleData.percentage}%` }}></div>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-white/10">
-                <div>
-                   <p className="text-slate-400 text-xs">Completed</p>
-                   <p className="font-bold text-lg">{cycleData.completed} <span className="text-slate-500 text-xs font-normal">/ {target}</span></p>
-                </div>
-                <div>
-                   <p className="text-slate-400 text-xs">Effective Work Days Left</p>
-                   <p className="font-bold text-lg flex items-center gap-2">
-                      {cycleData.weightedDaysLeft.toFixed(1)}
-                   </p>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        {/* Daily Progress */}
-        <div className={`rounded-3xl p-8 shadow-2xl shadow-blue-900/10 relative overflow-hidden flex flex-col justify-between transition-all duration-500 hover:-translate-y-1 text-white animate-fade-in-up delay-300 ${dailyStats.isDayOff ? 'bg-gradient-to-br from-slate-600 to-slate-800' : 'bg-gradient-to-br from-blue-600 to-indigo-800'}`}>
-          <div className="absolute left-0 bottom-0 p-32 bg-white/10 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none"></div>
-
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-6">
-               <div>
-                 <div className="flex items-center gap-2 text-white/70 mb-1">
-                   {dailyStats.isDayOff ? <Coffee className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
-                   <span className="text-xs font-bold uppercase tracking-widest">Daily Pace</span>
-                 </div>
-                 <h2 className="text-2xl font-bold">{dailyStats.isDayOff ? "Rest Day" : "Today's Progress"}</h2>
-               </div>
-               <div className="text-right">
-                  <p className="text-3xl font-bold">{dailyStats.count}</p>
-                  <p className="text-xs text-white/70 uppercase font-medium">Finished</p>
-               </div>
-            </div>
-
-            <div className="mb-6">
-               <div className="flex justify-between text-xs font-bold uppercase tracking-wider mb-2 text-white/80">
-                  <span>Progress</span>
-                  <span>Target: {dailyStats.target}</span>
-               </div>
-               <div className="h-4 bg-black/20 rounded-full overflow-hidden backdrop-blur-sm border border-white/10 shadow-inner">
-                  <div className="h-full bg-white rounded-full transition-all duration-700" style={{ width: `${dailyStats.percentage}%` }}></div>
-               </div>
-            </div>
-
-            <div className="bg-black/20 rounded-xl p-4 backdrop-blur-md border border-white/10 flex gap-4 items-center">
-               <div className="p-2 bg-white/20 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-white" />
-               </div>
-               <div className="flex-1 overflow-hidden">
-                  <p className="font-bold text-sm text-white mb-1">{coachingMessage.title}</p>
-                  {/* Mini-Carousel for card view */}
-                  <div className="h-8 relative">
-                     <div key={activeMsgIndex} className="animate-slide-in-right absolute inset-0 flex items-center">
-                       <p className="text-xs text-white/90 leading-snug line-clamp-2">{activeMsg}</p>
+               ) : (
+                  urgentItems.map(item => (
+                     <div key={item.id} className="flex items-center justify-between p-3 bg-red-50/50 border border-red-100 rounded-xl hover:bg-red-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                           <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                           <div>
+                              <p className="text-sm font-bold text-slate-800">{item.manuscriptId}</p>
+                              <p className="text-xs text-slate-500">{item.journalCode}</p>
+                           </div>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-xs font-semibold text-red-600">Due {item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'ASAP'}</p>
+                           <p className="text-[10px] text-slate-400">Rec: {new Date(item.dateReceived).toLocaleDateString()}</p>
+                        </div>
                      </div>
-                  </div>
-               </div>
+                  ))
+               )}
             </div>
-          </div>
-        </div>
-      </div>
+         </div>
 
-      {/* --- SMART PLAN SECTION --- */}
-      <div className="grid grid-cols-1 gap-6 animate-fade-in-up delay-300">
-        
-        {/* Smart Schedule Horizontal Scroll */}
-        {forecast.length > 0 && (
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-             <div className="flex items-center gap-3 mb-4">
-               <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                 <Map className="w-5 h-5" />
-               </div>
-               <div>
-                  <h3 className="text-lg font-bold text-slate-800">Smart Plan Ahead</h3>
-                  <p className="text-xs text-slate-500">Calculated daily targets to hit your cycle goal on time.</p>
-               </div>
-             </div>
-             
-             <div className="flex gap-4 overflow-x-auto pb-4 pt-1 hide-scrollbar snap-x">
-               {forecast.map((day, idx) => (
-                 <div key={idx} className={`snap-center shrink-0 w-32 p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 transition-all ${
-                    day.isOff 
-                      ? 'bg-slate-50 border-slate-100 text-slate-400' 
-                      : 'bg-white border-slate-200 shadow-sm hover:border-indigo-200 hover:shadow-md'
-                 }`}>
-                    <span className="text-xs font-bold uppercase tracking-wider opacity-60">{day.dayName}</span>
-                    <span className={`text-2xl font-bold ${day.isOff ? 'text-slate-300' : 'text-slate-800'}`}>
-                      {day.isOff ? 'OFF' : day.target}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-                       {day.dateStr}
-                    </span>
-                 </div>
-               ))}
-               <div className="snap-center shrink-0 w-32 p-4 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 text-slate-400">
-                  <CheckCircle className="w-6 h-6" />
-                  <span className="text-xs font-bold">End of Cycle</span>
-               </div>
-             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in-up delay-300">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-               <Activity className="w-5 h-5 text-slate-400" /> Status Distribution
+         {/* Recent Activity */}
+         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+               <Activity className="w-5 h-5 text-indigo-500" /> Recent Activity
             </h3>
-            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal className="w-5 h-5" /></button>
-          </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {pieData.map((entry, index) => {
-                    let fill = '#94a3b8';
-                    if (entry.name === 'Worked') fill = COLORS[Status.WORKED];
-                    else if (entry.name === 'Untouched') fill = COLORS[Status.UNTOUCHED];
-                    else if (entry.name.includes('Pending')) fill = COLORS[Status.PENDING_JM];
-                    return <Cell key={`cell-${index}`} fill={fill} />;
-                  })}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+            
+            <div className="space-y-0">
+               {recentActivity.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">No activity recorded yet.</p>
+               ) : (
+                  recentActivity.map((item, idx) => (
+                     <div key={item.id} className={`flex items-center justify-between py-3 ${idx !== recentActivity.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                        <div className="flex items-center gap-3">
+                           <div className={`p-2 rounded-full shrink-0 ${
+                              item.status === Status.WORKED ? 'bg-emerald-100 text-emerald-600' :
+                              item.status === Status.UNTOUCHED ? 'bg-slate-100 text-slate-500' :
+                              'bg-amber-100 text-amber-600'
+                           }`}>
+                              {item.status === Status.WORKED ? <CheckCircle className="w-4 h-4" /> : 
+                               item.status === Status.UNTOUCHED ? <Inbox className="w-4 h-4" /> : 
+                               <Clock className="w-4 h-4" />}
+                           </div>
+                           <div>
+                              <p className="text-sm font-semibold text-slate-700">{item.manuscriptId}</p>
+                              <p className="text-xs text-slate-400 flex items-center gap-1">
+                                 {item.journalCode} 
+                                 <span className="w-1 h-1 rounded-full bg-slate-300"></span> 
+                                 {new Date(item.dateUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </p>
+                           </div>
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                           item.status === Status.WORKED ? 'text-emerald-700 bg-emerald-50' : 
+                           item.status === Status.UNTOUCHED ? 'text-slate-600 bg-slate-100' : 
+                           'text-amber-700 bg-amber-50'
+                        }`}>
+                           {item.status.replace(/_/g, ' ')}
+                        </span>
+                     </div>
+                  ))
+               )}
+            </div>
+         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-               <BarChart3 className="w-5 h-5 text-slate-400" /> Weekly Output
-            </h3>
-            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal className="w-5 h-5" /></button>
-          </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={activityData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{fontSize: 12, fill: '#94a3b8'}} dy={10} />
-                <YAxis tickLine={false} axisLine={false} tick={{fontSize: 12, fill: '#94a3b8'}} allowDecimals={false} dx={-10} />
-                <Tooltip cursor={{fill: '#f8fafc'}} content={<CustomTooltip />} />
-                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={24} animationDuration={1000} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
     </div>
   );
 };
-
-const StatCard: React.FC<{ 
-  title: string; 
-  value: number; 
-  cycleValue?: number; 
-  cycleLabel?: string;
-  icon: React.ReactNode; 
-  color: string; 
-  trend: string;
-  onClick: () => void;
-  delay?: string;
-}> = ({ title, value, cycleValue, cycleLabel, icon, color, trend, onClick, delay = "" }) => (
-  <button 
-    onClick={onClick}
-    className={`group relative w-full bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left overflow-hidden animate-fade-in-up ${delay}`}
-  >
-    {/* Colored accent line at bottom */}
-    <div className={`absolute bottom-0 left-0 right-0 h-1 ${color} opacity-70 group-hover:opacity-100 transition-opacity`}></div>
-    
-    <div className="flex justify-between items-start mb-4">
-       <div className={`p-3 rounded-xl transition-all duration-300 bg-slate-50 text-slate-500 group-hover:bg-slate-100 group-hover:scale-110 group-hover:text-slate-800`}>
-         {icon}
-       </div>
-       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 group-hover:border-slate-200">
-         {trend}
-       </span>
-    </div>
-    <div>
-       <p className="text-4xl font-bold text-slate-800 mb-1 group-hover:scale-105 transition-transform origin-left tracking-tight">{value}</p>
-       <p className="text-sm font-medium text-slate-500 mb-3">{title}</p>
-       
-       {cycleValue !== undefined && (
-         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-100 text-xs group-hover:bg-blue-50 group-hover:border-blue-100 group-hover:text-blue-700 transition-colors">
-           <span className="font-bold">{cycleValue}</span>
-           <span className="opacity-70">{cycleLabel || 'this cycle'}</span>
-         </div>
-       )}
-    </div>
-  </button>
-);
 
 export default Dashboard;

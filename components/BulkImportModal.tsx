@@ -104,7 +104,6 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
           dateUpdated: new Date().toISOString(),
           dateStatusChanged: dateStatusChanged,
           completedDate: status === Status.WORKED ? (dateReturned || new Date().toISOString()) : undefined,
-          issueTypes: [],
           notes: []
         };
 

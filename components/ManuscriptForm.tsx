@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Manuscript, Status, IssueType, Note } from '../types';
+import { Manuscript, Status, Note } from '../types';
 import { X, Save, Edit2, Trash2, Plus, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface ManuscriptFormProps {
@@ -18,7 +18,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       journalCode: '',
       status: Status.UNTOUCHED,
       priority: 'Normal',
-      issueTypes: [],
       notes: [],
       dateReceived: new Date().toISOString(),
       dateStatusChanged: new Date().toISOString(),
@@ -69,15 +68,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       return new Date(isoString).toISOString().split('T')[0];
     } catch {
       return '';
-    }
-  };
-
-  const handleIssueToggle = (type: IssueType) => {
-    const currentIssues = formData.issueTypes || [];
-    if (currentIssues.includes(type)) {
-      setFormData({ ...formData, issueTypes: currentIssues.filter(t => t !== type) });
-    } else {
-      setFormData({ ...formData, issueTypes: [...currentIssues, type] });
     }
   };
 
@@ -156,7 +146,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       journalCode: formData.journalCode!,
       status: formData.status || Status.UNTOUCHED,
       priority: formData.priority || 'Normal',
-      issueTypes: formData.issueTypes || [],
       dateReceived: formData.dateReceived || new Date().toISOString(),
       dueDate: formData.dueDate,
       completedDate: formData.status === Status.WORKED ? formData.completedDate : undefined,
@@ -242,9 +231,9 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
 
           <div className={`p-5 rounded-2xl border ${isQueueMode ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50/50 border-slate-200'}`}>
             <h3 className="text-xs font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
-               Status & Priority
+               Status & Details
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1.5">Current Status</label>
                 <div className="relative">
@@ -313,26 +302,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Quality Checks</label>
-            <div className="flex flex-wrap gap-2">
-              {Object.values(IssueType).map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => handleIssueToggle(type)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                    formData.issueTypes?.includes(type)
-                      ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm transform scale-105'
-                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
             </div>
           </div>
 

@@ -7,15 +7,6 @@ export enum Status {
   PENDING_CED = 'PENDING_CED' // Pending: Email CED
 }
 
-export enum IssueType {
-  AFFILIATION = 'Affiliation/Linking',
-  XML_STRUCTURE = 'XML Structure',
-  METADATA = 'Metadata/Coversheet',
-  CONSISTENCY = 'Consistency/Logic',
-  POLICY = 'Policy/Compliance',
-  OTHER = 'Other'
-}
-
 export interface Note {
   id: string;
   content: string;
@@ -32,7 +23,7 @@ export interface Manuscript {
   completedDate?: string; // ISO string - Explicit completion date for WORKED items
   dateUpdated: string; // ISO string
   dateStatusChanged?: string; // ISO string - New field for tracking exact completion/status change time
-  issueTypes: IssueType[];
+  queryReason?: string; // Reason for the query (e.g. Figure Replacement, Missing Info)
   notes: Note[];
   priority: 'Normal' | 'High' | 'Urgent';
 }

@@ -13,7 +13,7 @@ const mapToManuscript = (row: any): Manuscript => ({
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
   dateStatusChanged: row.date_status_changed,
-  issueTypes: row.issue_types || [],
+  queryReason: row.query_reason, // Replaces issue_types
   notes: row.notes || []
 });
 
@@ -57,9 +57,7 @@ export const dataService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    const { data, error } = await supabase
-      .from('manuscripts')
-      .insert([{
+    const payload: any = {
         user_id: user.id,
         manuscript_id: m.manuscriptId,
         journal_code: m.journalCode,
@@ -70,13 +68,32 @@ export const dataService = {
         completed_date: m.completedDate,
         date_updated: new Date().toISOString(),
         date_status_changed: m.dateStatusChanged,
-        issue_types: m.issueTypes,
+        query_reason: m.queryReason,
         notes: m.notes
-      }])
+    };
+
+    const { data, error } = await supabase
+      .from('manuscripts')
+      .insert([payload])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+        // Fallback: If query_reason column missing, retry without it
+        if (error.code === '42703' && error.message?.includes('query_reason')) {
+            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying insert without it.");
+            delete payload.query_reason;
+            const { data: retryData, error: retryError } = await supabase
+                .from('manuscripts')
+                .insert([payload])
+                .select()
+                .single();
+            
+            if (retryError) throw retryError;
+            return mapToManuscript(retryData);
+        }
+        throw error;
+    }
     return mapToManuscript(data);
   },
 
@@ -91,9 +108,7 @@ export const dataService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    const { data, error } = await supabase
-      .from('manuscripts')
-      .update({
+    const payload: any = {
         manuscript_id: m.manuscriptId,
         journal_code: m.journalCode,
         status: m.status,
@@ -103,20 +118,41 @@ export const dataService = {
         completed_date: m.completedDate,
         date_updated: new Date().toISOString(),
         date_status_changed: m.dateStatusChanged,
-        issue_types: m.issueTypes,
+        query_reason: m.queryReason,
         notes: m.notes
-      })
+    };
+
+    const { data, error } = await supabase
+      .from('manuscripts')
+      .update(payload)
       .eq('id', m.id)
       .eq('user_id', user.id) // Ensure we only update our own records
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+        // Fallback: If query_reason column missing, retry without it
+        if (error.code === '42703' && error.message?.includes('query_reason')) {
+            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying update without it.");
+            delete payload.query_reason;
+            const { data: retryData, error: retryError } = await supabase
+                .from('manuscripts')
+                .update(payload)
+                .eq('id', m.id)
+                .eq('user_id', user.id)
+                .select()
+                .single();
+            
+            if (retryError) throw retryError;
+            return mapToManuscript(retryData);
+        }
+        throw error;
+    }
     return mapToManuscript(data);
   },
 
   async updateManuscripts(ids: string[], updates: Partial<Manuscript>) {
-    // Helper to apply updates
+    // Helper to apply updates locally
     const applyUpdates = (original: Manuscript) => ({
        ...original,
        ...updates,
@@ -139,11 +175,6 @@ export const dataService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    // Prepare DB object
-    // Note: We can't use the smart logic inside mapToManuscript for bulk updates easily via SQL
-    // so we assume the caller has set dateStatusChanged/completedDate correctly in 'updates' 
-    // OR we just update the fields provided.
-    
     // Convert camelCase updates to snake_case for DB
     const dbUpdates: any = {
        date_updated: new Date().toISOString()
@@ -152,6 +183,7 @@ export const dataService = {
     if (updates.priority) dbUpdates.priority = updates.priority;
     if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
     if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
+    if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
     
     const { error } = await supabase
       .from('manuscripts')
@@ -159,7 +191,21 @@ export const dataService = {
       .in('id', ids)
       .eq('user_id', user.id);
 
-    if (error) throw error;
+    if (error) {
+        // Fallback
+        if (error.code === '42703' && error.message?.includes('query_reason')) {
+            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying bulk update without it.");
+            delete dbUpdates.query_reason;
+            const { error: retryError } = await supabase
+                .from('manuscripts')
+                .update(dbUpdates)
+                .in('id', ids)
+                .eq('user_id', user.id);
+            if (retryError) throw retryError;
+            return;
+        }
+        throw error;
+    }
   },
 
   async deleteManuscript(id: string) {

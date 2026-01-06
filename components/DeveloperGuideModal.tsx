@@ -8,23 +8,7 @@ interface DeveloperGuideModalProps {
 const DeveloperGuideModal: React.FC<DeveloperGuideModalProps> = ({ onClose }) => {
   const [copied, setCopied] = React.useState(false);
 
-  const sqlContent = `-- 1. Shift Logs Table
-CREATE TABLE IF NOT EXISTS shift_logs (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  event_type TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now() NOT NULL
-);
-
-ALTER TABLE shift_logs ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Users can view own logs" ON shift_logs;
-CREATE POLICY "Users can view own logs" ON shift_logs FOR SELECT USING ( auth.uid() = user_id );
-
-DROP POLICY IF EXISTS "Users can insert own logs" ON shift_logs;
-CREATE POLICY "Users can insert own logs" ON shift_logs FOR INSERT WITH CHECK ( auth.uid() = user_id );
-
--- 2. Manuscripts Table
+  const sqlContent = `-- 1. Manuscripts Table (Core Data)
 CREATE TABLE IF NOT EXISTS manuscripts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -37,20 +21,26 @@ CREATE TABLE IF NOT EXISTS manuscripts (
   completed_date TIMESTAMPTZ,
   date_updated TIMESTAMPTZ DEFAULT now(),
   date_status_changed TIMESTAMPTZ DEFAULT now(),
-  issue_types TEXT[] DEFAULT '{}',
+  query_reason TEXT,
   notes JSONB DEFAULT '[]'
 );
 
 ALTER TABLE manuscripts ENABLE ROW LEVEL SECURITY;
 
+-- Cleanup old individual policies if they exist
+DROP POLICY IF EXISTS "Users can view own manuscripts" ON manuscripts;
+DROP POLICY IF EXISTS "Users can insert own manuscripts" ON manuscripts;
+DROP POLICY IF EXISTS "Users can update own manuscripts" ON manuscripts;
+DROP POLICY IF EXISTS "Users can delete own manuscripts" ON manuscripts;
+
+-- Create/Update consolidated policy
 DROP POLICY IF EXISTS "Users can manage own manuscripts" ON manuscripts;
 CREATE POLICY "Users can manage own manuscripts" ON manuscripts FOR ALL USING ( auth.uid() = user_id );
 
--- 3. User Settings (Targets & Smart Pacing)
+-- 2. User Settings (Targets & Smart Pacing)
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   target_per_cycle INTEGER DEFAULT 50,
-  shift_state JSONB DEFAULT '{"status": "IDLE", "startTime": null, "lastActiveTime": null}',
   days_off TEXT[] DEFAULT '{}',
   weekly_weights JSONB DEFAULT '[1, 1, 1, 1, 1, 1, 1]',
   exclude_weekends BOOLEAN DEFAULT false
@@ -61,9 +51,14 @@ ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can manage own settings" ON user_settings;
 CREATE POLICY "Users can manage own settings" ON user_settings FOR ALL USING ( auth.uid() = user_id );
 
--- Indexing
-CREATE INDEX IF NOT EXISTS idx_shift_logs_user_date ON shift_logs (user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id, date_updated DESC);`;
+-- Indexing for performance
+CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id, date_updated DESC);
+
+-- *** MIGRATION HELP ***
+-- If 'issue_types' exists, you can drop it:
+-- ALTER TABLE manuscripts DROP COLUMN IF EXISTS issue_types;
+-- If 'query_reason' does not exist yet:
+-- ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS query_reason TEXT;`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(sqlContent);
@@ -100,7 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
                   <Terminal className="w-4 h-4" /> Action Required
                 </h3>
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  Run the updated SQL script on the right in your Supabase SQL Editor. It includes the new <code>weekly_weights</code> column needed for Smart Pacing.
+                  Run the updated SQL script on the right in your Supabase SQL Editor. It includes the new <code>query_reason</code> column.
                 </p>
               </div>
 
@@ -112,18 +107,18 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
                   <div className="flex gap-3">
                     <History className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700">Fixes Smart Pacing</h4>
+                      <h4 className="text-xs font-bold text-slate-700">Tracks Query Reasons</h4>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                        Adds the column needed to save your Saturday/Sunday intensity preferences.
+                        Adds support for tracking specific reasons for JM queries (e.g. Figure Replacement).
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <Calculator className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700">Better Performance</h4>
+                      <h4 className="text-xs font-bold text-slate-700">Smart Pacing</h4>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                        Includes indexes for faster dashboard loading.
+                        Ensures weekly weighting columns exist.
                       </p>
                     </div>
                   </div>

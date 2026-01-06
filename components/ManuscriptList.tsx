@@ -121,7 +121,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   const downloadCSV = () => {
-    // Removed 'Issues', Renamed 'Completed Date' to 'Submitted Date'
     const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
     const rows = filtered.map(m => {
       // Concatenate all notes for CSV
@@ -148,7 +147,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         statusDate,
         submittedDate,
         m.priority,
-        // Removed issueTypes
         `"${notesContent.replace(/"/g, '""')}"`
       ];
     });
@@ -375,8 +373,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               </tr>
             )}
             {filtered.map((m) => {
-               // Determine which date to show for Status Date
-               // For WORKED, prefer completedDate. For others, use dateStatusChanged or dateUpdated.
                const displayDateRaw = m.status === Status.WORKED && m.completedDate 
                  ? m.completedDate 
                  : (m.dateStatusChanged || m.dateUpdated);
@@ -436,15 +432,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
-                      {m.issueTypes.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                          {m.issueTypes.map(issue => (
-                            <span key={issue} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] border border-slate-200">
-                              {issue.split('/')[0]}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                       
                       {m.notes.length > 0 ? (
                         <div className="flex flex-col gap-2">
@@ -464,7 +451,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                           ))}
                         </div>
                       ) : (
-                        m.issueTypes.length === 0 && <span className="text-[10px] text-slate-300 italic">No remarks</span>
+                        <span className="text-[10px] text-slate-300 italic">No remarks</span>
                       )}
                     </div>
                   </td>

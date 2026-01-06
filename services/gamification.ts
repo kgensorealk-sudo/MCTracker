@@ -1,4 +1,4 @@
-import { Achievement, Manuscript, Status, Quest, UserLevel, IssueType } from '../types';
+import { Achievement, Manuscript, Status, Quest, UserLevel } from '../types';
 
 // --- Constants ---
 const XP_PER_FILE = 25;
@@ -263,176 +263,42 @@ export const ACHIEVEMENTS: Achievement[] = [
     progress: (mss) => Math.min(100, (getMaxDailyCount(mss) / 50) * 100)
   },
 
-  // --- QUALITY (No Issues) ---
+  // --- QUALITY (Straight Through) ---
   {
     id: 'quality_careful',
-    title: 'Careful Hand',
-    description: 'Complete 10 manuscripts with zero issues flagged.',
+    title: 'Smooth Operator',
+    description: 'Complete 10 manuscripts without raising any queries.',
     icon: 'CheckCheck',
     tier: 'BRONZE',
     xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
     maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length,
-    condition: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length / 10) * 100)
+    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length,
+    condition: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length >= 10,
+    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && !m.queryReason).length / 10) * 100)
   },
   {
     id: 'quality_meticulous',
     title: 'Meticulous',
-    description: 'Complete 50 manuscripts with zero issues flagged.',
+    description: 'Complete 50 manuscripts without raising any queries.',
     icon: 'CheckCheck',
     tier: 'SILVER',
     xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
     maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length,
-    condition: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length / 50) * 100)
+    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length,
+    condition: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length >= 50,
+    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && !m.queryReason).length / 50) * 100)
   },
   {
     id: 'quality_pristine',
     title: 'Pristine Record',
-    description: 'Complete 100 manuscripts with zero issues flagged.',
+    description: 'Complete 100 manuscripts without raising any queries.',
     icon: 'CheckCheck',
     tier: 'GOLD',
     xpReward: XP_PER_ACHIEVEMENT_TIER.GOLD,
     maxProgressValue: 100,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length,
-    condition: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length >= 100,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length / 100) * 100)
-  },
-  {
-    id: 'quality_perfection',
-    title: 'Perfectionist',
-    description: 'Complete 500 manuscripts with zero issues flagged.',
-    icon: 'CheckCheck',
-    tier: 'PLATINUM',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.PLATINUM,
-    maxProgressValue: 500,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length,
-    condition: (mss) => mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length >= 500,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && (!m.issueTypes || m.issueTypes.length === 0)).length / 500) * 100)
-  },
-
-  // --- ISSUE HANDLING ---
-  {
-    id: 'issue_linker',
-    title: 'The Linker',
-    description: 'Fix 10 Affiliation/Linking issues.',
-    icon: 'Search',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length / 10) * 100)
-  },
-  {
-    id: 'issue_coder',
-    title: 'XML Coder',
-    description: 'Fix 10 XML Structure issues.',
-    icon: 'Search',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length / 10) * 100)
-  },
-  {
-    id: 'issue_librarian',
-    title: 'The Librarian',
-    description: 'Fix 10 Metadata/Coversheet issues.',
-    icon: 'Search',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length / 10) * 100)
-  },
-  {
-    id: 'issue_logician',
-    title: 'Logician',
-    description: 'Fix 10 Consistency/Logic issues.',
-    icon: 'Search',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length / 10) * 100)
-  },
-  {
-    id: 'issue_officer',
-    title: 'Compliance Officer',
-    description: 'Fix 10 Policy/Compliance issues.',
-    icon: 'Search',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length / 10) * 100)
-  },
-  {
-    id: 'issue_networker',
-    title: 'Master Networker',
-    description: 'Fix 50 Affiliation/Linking issues.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.AFFILIATION)).length / 50) * 100)
-  },
-  {
-    id: 'issue_architect',
-    title: 'XML Architect',
-    description: 'Fix 50 XML Structure issues.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.XML_STRUCTURE)).length / 50) * 100)
-  },
-  {
-    id: 'issue_archivist',
-    title: 'Archivist',
-    description: 'Fix 50 Metadata/Coversheet issues.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.METADATA)).length / 50) * 100)
-  },
-  {
-    id: 'issue_philosopher',
-    title: 'Philosopher',
-    description: 'Fix 50 Consistency/Logic issues.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.CONSISTENCY)).length / 50) * 100)
-  },
-  {
-    id: 'issue_enforcer',
-    title: 'The Enforcer',
-    description: 'Fix 50 Policy/Compliance issues.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length,
-    condition: (mss) => mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.issueTypes?.includes(IssueType.POLICY)).length / 50) * 100)
+    currentProgressValue: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length,
+    condition: (mss) => mss.filter(m => m.status === Status.WORKED && !m.queryReason).length >= 100,
+    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.WORKED && !m.queryReason).length / 100) * 100)
   },
 
   // --- QUERIES & PENDING ---
@@ -484,30 +350,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     condition: (mss) => mss.filter(m => m.status === Status.PENDING_JM).length >= 25,
     progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.PENDING_JM).length / 25) * 100)
   },
-  {
-    id: 'query_consultant',
-    title: 'The Consultant',
-    description: 'Send 25 TL Queries.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 25,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.PENDING_TL).length,
-    condition: (mss) => mss.filter(m => m.status === Status.PENDING_TL).length >= 25,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.PENDING_TL).length / 25) * 100)
-  },
-  {
-    id: 'query_mailman',
-    title: 'The Mailman',
-    description: 'Send 25 CED Emails.',
-    icon: 'Search',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 25,
-    currentProgressValue: (mss) => mss.filter(m => m.status === Status.PENDING_CED).length,
-    condition: (mss) => mss.filter(m => m.status === Status.PENDING_CED).length >= 25,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.status === Status.PENDING_CED).length / 25) * 100)
-  },
 
   // --- PRIORITIES ---
   {
@@ -545,30 +387,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     currentProgressValue: (mss) => mss.filter(m => m.priority === 'Urgent' && m.status === Status.WORKED).length,
     condition: (mss) => mss.filter(m => m.priority === 'Urgent' && m.status === Status.WORKED).length >= 100,
     progress: (mss) => Math.min(100, (mss.filter(m => m.priority === 'Urgent' && m.status === Status.WORKED).length / 100) * 100)
-  },
-  {
-    id: 'priority_important',
-    title: 'Important Business',
-    description: 'Complete 10 High Priority manuscripts.',
-    icon: 'Star',
-    tier: 'BRONZE',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.BRONZE,
-    maxProgressValue: 10,
-    currentProgressValue: (mss) => mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length,
-    condition: (mss) => mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length >= 10,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length / 10) * 100)
-  },
-  {
-    id: 'priority_vip',
-    title: 'VIP',
-    description: 'Complete 50 High Priority manuscripts.',
-    icon: 'Star',
-    tier: 'SILVER',
-    xpReward: XP_PER_ACHIEVEMENT_TIER.SILVER,
-    maxProgressValue: 50,
-    currentProgressValue: (mss) => mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length,
-    condition: (mss) => mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length >= 50,
-    progress: (mss) => Math.min(100, (mss.filter(m => m.priority === 'High' && m.status === Status.WORKED).length / 50) * 100)
   },
 
   // --- JOURNAL VARIETY ---

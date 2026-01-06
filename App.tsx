@@ -6,10 +6,11 @@ import ManuscriptForm from './components/ManuscriptForm';
 import BulkImportModal from './components/BulkImportModal';
 import GamificationHub from './components/AchievementsModal'; 
 import DeveloperGuideModal from './components/DeveloperGuideModal';
+import HistoryReport from './components/HistoryReport';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
@@ -23,7 +24,7 @@ const App: React.FC = () => {
   const [userSchedule, setUserSchedule] = useState<UserSchedule>({ daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] });
 
   // UI States
-  const [view, setView] = useState<'dashboard' | 'list'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'list' | 'history'>('dashboard');
   const [listFilter, setListFilter] = useState<Status | 'ALL' | 'PENDING_GROUP'>('ALL'); 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -108,9 +109,9 @@ const App: React.FC = () => {
         setIsBulkReview(false);
         setBulkQueue([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving:", error);
-      alert("Failed to save record.");
+      alert(`Failed to save record: ${error.message || 'Unknown error'}`);
     } finally {
       setDataLoading(false);
     }
@@ -140,9 +141,9 @@ const App: React.FC = () => {
 
     try {
       await dataService.updateManuscript(updatedManuscript);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Quick update failed:", error);
-      alert("Failed to update record.");
+      alert(`Failed to update record: ${error.message || 'Unknown error'}`);
       setManuscripts(prev => prev.map(m => m.id === id ? original : m));
     }
   };
@@ -164,9 +165,9 @@ const App: React.FC = () => {
 
     try {
       await dataService.updateManuscripts(ids, finalUpdates);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Bulk update failed:", error);
-      alert("Failed to update multiple records.");
+      alert(`Failed to update multiple records: ${error.message || 'Unknown error'}`);
       loadData(); 
     } finally {
       setDataLoading(false);
@@ -191,9 +192,9 @@ const App: React.FC = () => {
       try {
         await dataService.deleteManuscript(id);
         setManuscripts(prev => prev.filter(m => m.id !== id));
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error deleting:", error);
-        alert("Failed to delete record.");
+        alert(`Failed to delete record: ${error.message || 'Unknown error'}`);
       } finally {
         setDataLoading(false);
       }
@@ -211,9 +212,9 @@ const App: React.FC = () => {
       setManuscripts(prev => [...createdItems, ...prev]);
       setListFilter('ALL');
       setView('list'); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Bulk import failed:", error);
-      alert("Some items failed to import.");
+      alert(`Some items failed to import: ${error.message || 'Unknown error'}`);
       loadData();
     } finally {
       setDataLoading(false);
@@ -227,8 +228,10 @@ const App: React.FC = () => {
 
   const handleUpdateSchedule = (schedule: UserSchedule) => {
     setUserSchedule(schedule);
-    dataService.updateSchedule(schedule).catch(err => {
+    dataService.updateSchedule(schedule).catch((err: any) => {
       console.error("Schedule sync failed:", err);
+      // Improved error detection logic is already inside updateSchedule via console.warn, 
+      // but alerting here ensures user visibility
       if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column') || err.message.includes('relation'))) {
          alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
       }
@@ -253,7 +256,7 @@ const App: React.FC = () => {
     setView('list');
   };
 
-  const handleViewChange = (newView: 'dashboard' | 'list') => {
+  const handleViewChange = (newView: 'dashboard' | 'list' | 'history') => {
     if (newView === 'list') {
       setListFilter('ALL'); 
     }
@@ -354,7 +357,13 @@ const App: React.FC = () => {
                 onClick={() => handleViewChange('list')}
                 className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
-                <div className="flex items-center gap-2"><List className="w-4 h-4" /> <span className="hidden sm:inline">Workflow List</span></div>
+                <div className="flex items-center gap-2"><List className="w-4 h-4" /> <span className="hidden sm:inline">Files</span></div>
+              </button>
+              <button 
+                onClick={() => handleViewChange('history')}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+              >
+                <div className="flex items-center gap-2"><History className="w-4 h-4" /> <span className="hidden sm:inline">Reports</span></div>
               </button>
             </nav>
             
@@ -428,7 +437,7 @@ const App: React.FC = () => {
             onFilterClick={handleDashboardFilter}
             onUpdateSchedule={handleUpdateSchedule}
           />
-        ) : (
+        ) : view === 'list' ? (
           <ManuscriptList 
             manuscripts={manuscripts} 
             onEdit={handleEdit}
@@ -437,6 +446,11 @@ const App: React.FC = () => {
             onBulkUpdate={handleBulkUpdate}
             onBulkReview={handleBulkReview} // Passed new handler
             activeFilter={listFilter}
+          />
+        ) : (
+          <HistoryReport 
+            manuscripts={manuscripts}
+            userName={userName}
           />
         )}
       </main>
