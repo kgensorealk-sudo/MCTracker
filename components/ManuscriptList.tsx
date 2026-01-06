@@ -124,7 +124,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   const handleQuickAction = (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => {
     const now = new Date().toISOString();
     const updates: Partial<Manuscript> = {
-      dateStatusChanged: now
+      dateStatusChanged: now,
+      dateUpdated: now
     };
 
     if (action === 'WORKED') {

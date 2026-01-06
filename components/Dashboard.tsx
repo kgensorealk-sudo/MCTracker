@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Line, Cell } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, BarChart3, Coffee, Settings, Briefcase, Info, Trophy, Mail, AlertTriangle, Timer, Flame, Clock, Target } from 'lucide-react';
+import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, BarChart3, Coffee, Settings, Briefcase, Info, Trophy, AlertTriangle, Timer, Flame, Clock, Target } from 'lucide-react';
 import { calculateXP, calculateLevel } from '../services/gamification';
 
 interface DashboardProps {
@@ -13,14 +13,6 @@ interface DashboardProps {
   onFilterClick: (status: Status | 'ALL' | 'PENDING_GROUP') => void;
   onUpdateSchedule: (schedule: UserSchedule) => void;
 }
-
-const COLORS = {
-  [Status.WORKED]: '#10b981', // Emerald 500
-  [Status.UNTOUCHED]: '#94a3b8', // Slate 400
-  [Status.PENDING_JM]: '#f43f5e', // Rose 500
-  [Status.PENDING_TL]: '#f59e0b', // Amber 500
-  [Status.PENDING_CED]: '#8b5cf6', // Violet 500
-};
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -355,7 +347,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [manuscripts, target, cycleData, userSchedule, userName]);
 
   // --- Smart Planning & Coaching Logic ---
-  const { forecast, coachingMessage } = useMemo(() => {
+  const { coachingMessage } = useMemo(() => {
     const { endDate } = cycleDates;
     const remainingToTarget = Math.max(0, target - stats.cycleWorked);
     

@@ -8,7 +8,7 @@ interface HistoryReportProps {
   userName: string;
 }
 
-const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, userName }) => {
+const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
   
   const stats = useMemo(() => {
     const months: Record<string, { count: number; totalTat: number; countWithTat: number }> = {};
