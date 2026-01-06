@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Line, Cell } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, BarChart3, Coffee, Settings, Briefcase, Info, Trophy, AlertTriangle, Timer, Flame, Clock, Target } from 'lucide-react';
+import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, BarChart3, Coffee, Settings, Briefcase, Info, Trophy, AlertTriangle, Timer, Flame, Clock, Target, Calendar } from 'lucide-react';
 import { calculateXP, calculateLevel } from '../services/gamification';
 
 interface DashboardProps {
@@ -347,7 +347,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [manuscripts, target, cycleData, userSchedule, userName]);
 
   // --- Smart Planning & Coaching Logic ---
-  const { coachingMessage } = useMemo(() => {
+  const { forecast, coachingMessage } = useMemo(() => {
     const { endDate } = cycleDates;
     const remainingToTarget = Math.max(0, target - stats.cycleWorked);
     
@@ -992,6 +992,45 @@ const Dashboard: React.FC<DashboardProps> = ({
          </div>
       </div>
       
+      {/* Forecast Section - Restored */}
+      {forecast.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+           <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                 <Calendar className="w-5 h-5 text-indigo-500" /> Smart Forecast
+              </h3>
+              <span className="text-xs text-slate-500">Recommended daily targets to finish cycle on time</span>
+           </div>
+           
+           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-3">
+              {forecast.slice(0, 7).map((day, idx) => (
+                 <div key={idx} className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all hover:scale-105 ${
+                    day.isOff 
+                      ? 'bg-slate-50 border-slate-200 opacity-70' 
+                      : 'bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50 hover:shadow-md'
+                 }`}>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{day.dayName}</span>
+                     <span className="text-xs font-semibold text-slate-600 mb-2">{day.dateStr}</span>
+                     
+                     {day.isOff ? (
+                         <span className="px-2 py-1 rounded text-[10px] font-bold bg-slate-200 text-slate-500">Off</span>
+                     ) : (
+                         <>
+                            <span className="text-xl font-bold text-indigo-600 leading-none">{day.target}</span>
+                            <span className="text-[9px] text-indigo-400 font-medium mt-0.5">files</span>
+                         </>
+                     )}
+                 </div>
+              ))}
+           </div>
+           {forecast.length > 7 && (
+              <p className="text-center text-xs text-slate-400 mt-4 italic">
+                 + {forecast.length - 7} more days in cycle
+              </p>
+           )}
+        </div>
+      )}
+
       {/* Bottom Section: Watchlist & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          
