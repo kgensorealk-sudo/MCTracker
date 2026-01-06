@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Info, Zap } from 'lucide-react';
+import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Info, Zap, AlertCircle, BarChart3, HelpCircle } from 'lucide-react';
 
 interface HistoryReportProps {
   manuscripts: Manuscript[];
@@ -18,8 +18,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
     
     // Helper to get Year-Month key
     const getMonthKey = (dateStr: string) => {
-      const d = new Date(dateStr);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return null;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      } catch {
+        return null;
+      }
     };
 
     // Helper to format key to Label
@@ -31,22 +36,29 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
 
     manuscripts.forEach(m => {
       // 1. Monthly Stats (Worked only)
-      if (m.status === Status.WORKED && m.completedDate) {
-        const key = getMonthKey(m.completedDate);
-        if (!months[key]) {
-          months[key] = { count: 0, totalTat: 0, countWithTat: 0 };
-        }
+      if (m.status === Status.WORKED) {
+        // Robust Date Selection: explicit completedDate -> status change -> updated -> received
+        const workDate = m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived;
+        const key = getMonthKey(workDate);
         
-        months[key].count += 1;
-        totalWorked++;
+        if (key) {
+            if (!months[key]) {
+              months[key] = { count: 0, totalTat: 0, countWithTat: 0 };
+            }
+            
+            months[key].count += 1;
+            totalWorked++;
 
-        // Calculate Turnaround Time (TAT)
-        const start = new Date(m.dateReceived).getTime();
-        const end = new Date(m.completedDate).getTime();
-        const days = Math.max(0, (end - start) / (1000 * 3600 * 24));
-        
-        months[key].totalTat += days;
-        months[key].countWithTat += 1;
+            // Calculate Turnaround Time (TAT)
+            const start = new Date(m.dateReceived).getTime();
+            const end = new Date(workDate).getTime();
+            
+            if (!isNaN(start) && !isNaN(end)) {
+                const days = Math.max(0, (end - start) / (1000 * 3600 * 24));
+                months[key].totalTat += days;
+                months[key].countWithTat += 1;
+            }
+        }
       }
 
       // 2. Daily Stats (Worked & Queried)
@@ -90,10 +102,10 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
     
     const lastMonthDate = new Date();
     lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-    const lastMonthKey = getMonthKey(lastMonthDate.toISOString());
+    const lastMonthKey = getMonthKey(lastMonthDate.toISOString()) || '';
 
-    const currentStats = months[currentKey] || { count: 0 };
-    const lastStats = months[lastMonthKey] || { count: 0 };
+    const currentStats = (currentKey && months[currentKey]) ? months[currentKey] : { count: 0 };
+    const lastStats = (lastMonthKey && months[lastMonthKey]) ? months[lastMonthKey] : { count: 0 };
 
     const overallTat = chartData.reduce((acc, curr) => acc + (curr.avgTat * curr.count), 0) / Math.max(1, totalWorked);
 
@@ -135,7 +147,11 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
 
     const formatDate = (d: string) => {
         if (d === 'N/A') return d;
-        return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        try {
+            return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        } catch {
+            return d;
+        }
     };
 
     return {
@@ -148,7 +164,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
         current: currentStats.count,
         last: lastStats.count,
         diff: currentStats.count - lastStats.count,
-        lastMonthLabel: formatLabel(lastMonthKey)
+        lastMonthLabel: lastMonthKey ? formatLabel(lastMonthKey) : 'Last Month'
       },
       records: {
         bestWorked: { ...maxWorkedDay, label: formatDate(maxWorkedDay.date) },
@@ -282,139 +298,175 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Monthly Productivity Chart */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-blue-500" /> Monthly Output
+                    <TrendingUp className="w-5 h-5 text-indigo-500" /> Monthly Output
                  </h3>
-                 <div className="group relative">
-                    <Info className="w-4 h-4 text-slate-400 cursor-help" />
-                    <div className="absolute right-0 top-6 w-64 bg-slate-800 text-white text-xs p-3 rounded-xl shadow-xl z-20 hidden group-hover:block pointer-events-none">
-                       <p className="font-semibold mb-1 text-slate-200 border-b border-slate-700 pb-1">Metric Definition</p>
-                       <p className="text-slate-300 leading-relaxed">
-                          The total number of manuscripts marked as <strong>WORKED</strong> (Completed) within each calendar month.
-                       </p>
-                    </div>
+                 <div className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">
+                    Volume Metric
                  </div>
               </div>
               <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per month.</p>
            </div>
 
-           <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis 
-                       dataKey="label" 
-                       axisLine={false} 
-                       tickLine={false} 
-                       tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                    />
-                    <YAxis 
-                       axisLine={false} 
-                       tickLine={false} 
-                       tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                    />
-                    <Tooltip 
-                       cursor={{fill: '#f8fafc'}}
-                       content={({ active, payload, label }) => {
-                          if (active && payload && payload.length) {
-                             return (
-                                <div className="bg-slate-900 text-white text-xs py-2 px-3 rounded shadow-xl">
-                                   <p className="font-bold mb-1">{label}</p>
-                                   <p>Completed: <span className="text-emerald-400 font-bold">{payload[0].value}</span></p>
-                                </div>
-                             );
-                          }
-                          return null;
-                       }}
-                    />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                       {stats.chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.key === stats.topMonth?.key ? '#6366f1' : '#94a3b8'} />
-                       ))}
-                    </Bar>
-                 </BarChart>
-              </ResponsiveContainer>
+           <div className="h-[300px] w-full flex-1 min-h-[300px]">
+              {stats.chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                   <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                         dataKey="label" 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
+                         interval="preserveStartEnd"
+                      />
+                      <YAxis 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
+                         width={30}
+                      />
+                      <Tooltip 
+                         cursor={{fill: '#f8fafc'}}
+                         content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                               return (
+                                  <div className="bg-slate-900 text-white text-xs py-2 px-3 rounded shadow-xl">
+                                     <p className="font-bold mb-1">{label}</p>
+                                     <p>Completed: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
+                                  </div>
+                               );
+                            }
+                            return null;
+                         }}
+                      />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={50}>
+                         {stats.chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.key === stats.topMonth?.key ? '#6366f1' : '#cbd5e1'} />
+                         ))}
+                      </Bar>
+                   </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                   <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+                   <p className="text-sm font-medium">No history data available yet.</p>
+                   <p className="text-xs opacity-75">Mark files as 'Worked' to see charts.</p>
+                </div>
+              )}
            </div>
            
-           <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
-              <p>
-                 <strong className="text-slate-700">What is this graph?</strong> This bar chart shows your total volume of completed work over time. 
-                 The tallest bar (highlighted in purple) represents your most productive month on record.
-              </p>
+           {/* Detailed Explanation: Output */}
+           <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3">
+              <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5 mb-2">
+                 <HelpCircle className="w-3.5 h-3.5" /> Understanding this Graph
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                 <div>
+                    <span className="font-semibold text-indigo-600 block mb-0.5">What it tracks</span>
+                    <p className="text-slate-600 leading-relaxed">
+                       The sheer volume of work you finish. Each bar represents the total count of files marked as <span className="font-mono bg-indigo-50 text-indigo-700 px-1 rounded">WORKED</span> in that month.
+                    </p>
+                 </div>
+                 <div>
+                    <span className="font-semibold text-indigo-600 block mb-0.5">Why it matters</span>
+                    <p className="text-slate-600 leading-relaxed">
+                       Higher bars mean higher productivity. The <span className="text-indigo-500 font-bold">purple bar</span> highlights your personal best month ever.
+                    </p>
+                 </div>
+              </div>
            </div>
         </div>
 
         {/* Turnaround Time Trend */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-amber-500" /> Turnaround Efficiency
                  </h3>
-                 <div className="group relative">
-                    <Info className="w-4 h-4 text-slate-400 cursor-help" />
-                    <div className="absolute right-0 top-6 w-64 bg-slate-800 text-white text-xs p-3 rounded-xl shadow-xl z-20 hidden group-hover:block pointer-events-none">
-                       <p className="font-semibold mb-1 text-slate-200 border-b border-slate-700 pb-1">Metric Definition</p>
-                       <p className="text-slate-300 leading-relaxed">
-                          Average days between <strong>Date Received</strong> and <strong>Completed Date</strong> for files finished in that month. Lower is better.
-                       </p>
-                    </div>
+                 <div className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">
+                    Speed Metric
                  </div>
               </div>
               <p className="text-xs text-slate-500 mt-1">Average days taken to complete a file.</p>
            </div>
 
-           <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                 <LineChart data={stats.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis 
-                       dataKey="label" 
-                       axisLine={false} 
-                       tickLine={false} 
-                       tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                    />
-                    <YAxis 
-                       axisLine={false} 
-                       tickLine={false} 
-                       tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                    />
-                    <Tooltip 
-                       cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
-                       content={({ active, payload, label }) => {
-                          if (active && payload && payload.length) {
-                             return (
-                                <div className="bg-white border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded shadow-xl">
-                                   <p className="font-bold mb-1 border-b border-slate-100 pb-1">{label}</p>
-                                   <p className="flex items-center gap-2">
-                                      Avg TAT: <span className="text-amber-600 font-bold">{payload[0].value} days</span>
-                                   </p>
-                                </div>
-                             );
-                          }
-                          return null;
-                       }}
-                    />
-                    <Line 
-                       type="monotone" 
-                       dataKey="avgTat" 
-                       stroke="#f59e0b" 
-                       strokeWidth={3} 
-                       dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }}
-                       activeDot={{ r: 6, fill: '#f59e0b' }}
-                    />
-                 </LineChart>
-              </ResponsiveContainer>
+           <div className="h-[300px] w-full flex-1 min-h-[300px]">
+              {stats.chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                   <LineChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                         dataKey="label" 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
+                         interval="preserveStartEnd"
+                      />
+                      <YAxis 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
+                         width={30}
+                      />
+                      <Tooltip 
+                         cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                         content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                               return (
+                                  <div className="bg-white border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded shadow-xl">
+                                     <p className="font-bold mb-1 border-b border-slate-100 pb-1">{label}</p>
+                                     <p className="flex items-center gap-2">
+                                        Avg TAT: <span className="text-amber-600 font-bold">{payload[0].value} days</span>
+                                     </p>
+                                  </div>
+                               );
+                            }
+                            return null;
+                         }}
+                      />
+                      <Line 
+                         type="monotone" 
+                         dataKey="avgTat" 
+                         stroke="#f59e0b" 
+                         strokeWidth={3} 
+                         dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }}
+                         activeDot={{ r: 6, fill: '#f59e0b' }}
+                      />
+                   </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                   <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+                   <p className="text-sm font-medium">No turnaround data available.</p>
+                   <p className="text-xs opacity-75">Complete more files to track efficiency.</p>
+                </div>
+              )}
            </div>
            
-           <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
-              <p>
-                 <strong className="text-slate-700">What is this graph?</strong> This line chart tracks the average number of days it takes you to finish a file (Turnaround Time). 
-                 A downward trend indicates you are completing work faster over time.
-              </p>
+           {/* Detailed Explanation: Speed */}
+           <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3">
+              <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5 mb-2">
+                 <HelpCircle className="w-3.5 h-3.5" /> Understanding this Graph
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                 <div>
+                    <span className="font-semibold text-amber-600 block mb-0.5">What it tracks</span>
+                    <p className="text-slate-600 leading-relaxed">
+                       Speed. It measures the average gap between <span className="font-mono bg-slate-200 px-1 rounded">Date Sent</span> and <span className="font-mono bg-slate-200 px-1 rounded">Date Completed</span> for files finished that month.
+                    </p>
+                 </div>
+                 <div>
+                    <span className="font-semibold text-amber-600 block mb-0.5">Why it matters</span>
+                    <p className="text-slate-600 leading-relaxed">
+                       <span className="font-bold text-slate-800">Lower is better.</span> A downward line means you are working faster. Spikes often indicate difficult batches or backlog clearing.
+                    </p>
+                 </div>
+              </div>
            </div>
         </div>
 
@@ -436,6 +488,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
+                  {stats.chartData.length === 0 && (
+                     <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
+                           No data available yet. Start completing manuscripts to populate this report.
+                        </td>
+                     </tr>
+                  )}
                   {[...stats.chartData].reverse().map((row) => (
                      <tr key={row.key} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 font-medium text-slate-700">{row.label}</td>

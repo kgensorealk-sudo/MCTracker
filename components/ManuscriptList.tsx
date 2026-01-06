@@ -133,6 +133,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       return;
     }
 
+    // Intercept WORKED action to require confirmation
+    if (action === 'WORKED') {
+      const isConfirmed = window.confirm(`Are you sure you want to mark ${m.manuscriptId} as WORKED?`);
+      if (!isConfirmed) return;
+    }
+
     const now = new Date().toISOString();
     const updates: Partial<Manuscript> = {
       dateStatusChanged: now,

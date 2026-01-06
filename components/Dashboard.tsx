@@ -348,8 +348,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // --- Smart Planning & Coaching Logic ---
   const { forecast, coachingMessage } = useMemo(() => {
-    const { endDate } = cycleDates;
+    const { endDate, startDate } = cycleDates;
     const remainingToTarget = Math.max(0, target - stats.cycleWorked);
+    
+    // Calculate total cycle days accurately
+    const totalCycleDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)));
     
     const forecastDays = [];
     const itrDate = new Date();
@@ -401,9 +404,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         ? (itemsLeft / cycleData.weightedDaysLeft) 
         : itemsLeft; 
 
-    const idealDailyPace = Math.max(1, target / 15);
+    const idealDailyPace = Math.max(1, target / totalCycleDays);
+    
+    // Status Logic
     const isBehind = avgNeededPerWorkDay > (idealDailyPace * 1.2); 
     const isWayBehind = avgNeededPerWorkDay > (idealDailyPace * 1.6); 
+    const isLastDay = getLocalISODate(new Date()) === getLocalISODate(endDate);
     
     let title = "";
     let messages: string[] = [];
@@ -421,6 +427,14 @@ const Dashboard: React.FC<DashboardProps> = ({
          "Use this time to organize for the next cycle or take a breather."
        ];
        type = "success";
+    } else if (isLastDay) {
+       title = "Final Day Sprint";
+       messages = [
+          `Cycle ends today! ${remainingToTarget} files remaining.`,
+          "Last push to hit the green target.",
+          "Finish strong!"
+       ];
+       type = remainingToTarget > 5 ? "danger" : "warning";
     } else if (dailyStats.isDayOff) {
        title = "Recharge Mode";
        if (dailyStats.count > 0) {
@@ -432,9 +446,9 @@ const Dashboard: React.FC<DashboardProps> = ({
          type = "success";
        } else {
          messages = [
-            "Though it is your day off, it would be great if you can finish at least 5 items today.",
             "Rest is productive too. Come back stronger tomorrow.",
-            "Enjoy the break! A fresh mind works faster."
+            "Enjoy the break! A fresh mind works faster.",
+            "No output needed today. Relax."
          ];
          type = "neutral";
        }
@@ -448,13 +462,24 @@ const Dashboard: React.FC<DashboardProps> = ({
           ];
           type = "success";
        } else if (remainingToday <= 5 && countToday > 0) {
-          title = "Almost There";
-          messages = [
-             `You've completed ${countToday} files today, ${remainingToday} more to keep on pace.`,
-             "Pushing further will be great to build a safety buffer.",
-             "Just a final sprint to clear today's quota!"
-          ];
-          type = "warning";
+          // Context-aware "Almost There"
+          if (isWayBehind) {
+              title = "Almost Saved The Day";
+              messages = [
+                 `Finish these last ${remainingToday} files to stop falling further behind.`,
+                 "Crucial push! Complete today's quota to stabilize the cycle.",
+                 "Don't give up now, finishing today's load is vital."
+              ];
+              type = "warning";
+          } else {
+              title = "Almost There";
+              messages = [
+                 `You've completed ${countToday} files today, ${remainingToday} more to keep on pace.`,
+                 "Pushing further will be great to build a safety buffer.",
+                 "Just a final sprint to clear today's quota!"
+              ];
+              type = "info";
+          }
        } else if (isWayBehind) {
           title = "Heavy Lifting";
           messages = [
@@ -472,7 +497,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              `Aim for about ${avgNeeded} items each subsequent day to smooth out the load.`,
              `Achieve at least ${dailyStats.target} files today to keep the pace.`
           ];
-          type = "danger";
+          type = "warning";
        } else {
           // On Track
           title = "On Track";
@@ -992,9 +1017,8 @@ const Dashboard: React.FC<DashboardProps> = ({
          </div>
       </div>
       
-      {/* Forecast Section - Restored */}
-      {forecast.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      {/* Forecast Section - Always Visible */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
            <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                  <Calendar className="w-5 h-5 text-indigo-500" /> Smart Forecast
@@ -1002,34 +1026,42 @@ const Dashboard: React.FC<DashboardProps> = ({
               <span className="text-xs text-slate-500">Recommended daily targets to finish cycle on time</span>
            </div>
            
-           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-3">
-              {forecast.slice(0, 7).map((day, idx) => (
-                 <div key={idx} className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all hover:scale-105 ${
-                    day.isOff 
-                      ? 'bg-slate-50 border-slate-200 opacity-70' 
-                      : 'bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50 hover:shadow-md'
-                 }`}>
-                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{day.dayName}</span>
-                     <span className="text-xs font-semibold text-slate-600 mb-2">{day.dateStr}</span>
-                     
-                     {day.isOff ? (
-                         <span className="px-2 py-1 rounded text-[10px] font-bold bg-slate-200 text-slate-500">Off</span>
-                     ) : (
-                         <>
-                            <span className="text-xl font-bold text-indigo-600 leading-none">{day.target}</span>
-                            <span className="text-[9px] text-indigo-400 font-medium mt-0.5">files</span>
-                         </>
-                     )}
-                 </div>
-              ))}
-           </div>
+           {forecast.length > 0 ? (
+               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-3">
+                  {forecast.slice(0, 7).map((day, idx) => (
+                     <div key={idx} className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all hover:scale-105 ${
+                        day.isOff 
+                          ? 'bg-slate-50 border-slate-200 opacity-70' 
+                          : 'bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50 hover:shadow-md'
+                     }`}>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{day.dayName}</span>
+                         <span className="text-xs font-semibold text-slate-600 mb-2">{day.dateStr}</span>
+                         
+                         {day.isOff ? (
+                             <span className="px-2 py-1 rounded text-[10px] font-bold bg-slate-200 text-slate-500">Off</span>
+                         ) : (
+                             <>
+                                <span className="text-xl font-bold text-indigo-600 leading-none">{day.target}</span>
+                                <span className="text-[9px] text-indigo-400 font-medium mt-0.5">files</span>
+                             </>
+                         )}
+                     </div>
+                  ))}
+               </div>
+           ) : (
+               <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  <CheckCircle className="w-8 h-8 mx-auto text-emerald-400 mb-2" />
+                  <p className="text-sm font-bold text-slate-600">No forecast needed</p>
+                  <p className="text-xs text-slate-400 mt-1">You have either completed the cycle or it ends today. Check Cycle Progress for details.</p>
+               </div>
+           )}
+
            {forecast.length > 7 && (
               <p className="text-center text-xs text-slate-400 mt-4 italic">
                  + {forecast.length - 7} more days in cycle
               </p>
            )}
-        </div>
-      )}
+      </div>
 
       {/* Bottom Section: Watchlist & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
