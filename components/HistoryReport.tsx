@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Info, Zap, AlertCircle, BarChart3, HelpCircle } from 'lucide-react';
+import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Zap, AlertCircle, HelpCircle } from 'lucide-react';
 
 interface HistoryReportProps {
   manuscripts: Manuscript[];
