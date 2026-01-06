@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Database, Copy, Check, Terminal, Info, History, Calculator } from 'lucide-react';
 
 interface DeveloperGuideModalProps {
@@ -6,9 +6,19 @@ interface DeveloperGuideModalProps {
 }
 
 const DeveloperGuideModal: React.FC<DeveloperGuideModalProps> = ({ onClose }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
-  const sqlContent = `-- 1. Manuscripts Table (Core Data)
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
+
+  const sqlContent = `-- MASTERCOPY TRACKER SCHEMA FIX SCRIPT
+-- Run this script to sync your database with the latest app features.
+-- It is safe to run multiple times (it wont delete your data).
+
+-- 1. MANUSCRIPTS TABLE
 CREATE TABLE IF NOT EXISTS manuscripts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -21,44 +31,48 @@ CREATE TABLE IF NOT EXISTS manuscripts (
   completed_date TIMESTAMPTZ,
   date_updated TIMESTAMPTZ DEFAULT now(),
   date_status_changed TIMESTAMPTZ DEFAULT now(),
-  query_reason TEXT,
   notes JSONB DEFAULT '[]'
 );
 
+-- MIGRATION: Safely add new columns if they are missing
+ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS query_reason TEXT;
+ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS date_queried TIMESTAMPTZ;
+
+-- Security Policies
 ALTER TABLE manuscripts ENABLE ROW LEVEL SECURITY;
 
--- Cleanup old individual policies if they exist
 DROP POLICY IF EXISTS "Users can view own manuscripts" ON manuscripts;
 DROP POLICY IF EXISTS "Users can insert own manuscripts" ON manuscripts;
 DROP POLICY IF EXISTS "Users can update own manuscripts" ON manuscripts;
 DROP POLICY IF EXISTS "Users can delete own manuscripts" ON manuscripts;
-
--- Create/Update consolidated policy
 DROP POLICY IF EXISTS "Users can manage own manuscripts" ON manuscripts;
+
 CREATE POLICY "Users can manage own manuscripts" ON manuscripts FOR ALL USING ( auth.uid() = user_id );
 
--- 2. User Settings (Targets & Smart Pacing)
+-- 2. USER SETTINGS TABLE
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   target_per_cycle INTEGER DEFAULT 50,
-  days_off TEXT[] DEFAULT '{}',
-  weekly_weights JSONB DEFAULT '[1, 1, 1, 1, 1, 1, 1]',
-  exclude_weekends BOOLEAN DEFAULT false
+  days_off TEXT[] DEFAULT '{}'
 );
 
+-- MIGRATION: Safely add new columns for Smart Pacing
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS weekly_weights JSONB DEFAULT '[1, 1, 1, 1, 1, 1, 1]';
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exclude_weekends BOOLEAN DEFAULT false;
+
+-- Security Policies
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own settings" ON user_settings;
+DROP POLICY IF EXISTS "Users can insert own settings" ON user_settings;
+DROP POLICY IF EXISTS "Users can update own settings" ON user_settings;
 DROP POLICY IF EXISTS "Users can manage own settings" ON user_settings;
+
 CREATE POLICY "Users can manage own settings" ON user_settings FOR ALL USING ( auth.uid() = user_id );
 
--- Indexing for performance
+-- 3. Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id, date_updated DESC);
-
--- *** MIGRATION HELP ***
--- If 'issue_types' exists, you can drop it:
--- ALTER TABLE manuscripts DROP COLUMN IF EXISTS issue_types;
--- If 'query_reason' does not exist yet:
--- ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS query_reason TEXT;`;
+`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(sqlContent);
@@ -67,8 +81,8 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh]">
+    <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+      <div className={`bg-white rounded-xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh] ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-100 rounded-lg">
@@ -79,7 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
               <p className="text-sm text-slate-500">Required configuration for Shift Timer and History features</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5 text-slate-500" />
           </button>
         </div>
@@ -87,7 +101,6 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
         <div className="p-6 flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            {/* Left Column: Context & Explanations */}
             <div className="lg:col-span-1 space-y-6">
               
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
@@ -95,30 +108,30 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
                   <Terminal className="w-4 h-4" /> Action Required
                 </h3>
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  Run the updated SQL script on the right in your Supabase SQL Editor. It includes the new <code>query_reason</code> column.
+                  The script on the right is a <strong>Smart Fix</strong>. It will create tables if they don't exist, OR add the missing columns (like <code>date_queried</code>) if you already have data.
                 </p>
               </div>
 
               <div>
                 <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <Info className="w-4 h-4 text-blue-500" /> Why replace the old SQL?
+                  <Info className="w-4 h-4 text-blue-500" /> What this script does
                 </h3>
                 <div className="space-y-4">
                   <div className="flex gap-3">
                     <History className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700">Tracks Query Reasons</h4>
+                      <h4 className="text-xs font-bold text-slate-700">Syncs Schema</h4>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                        Adds support for tracking specific reasons for JM queries (e.g. Figure Replacement).
+                        Ensures your database has the <code>query_reason</code> and <code>date_queried</code> columns required for the new reporting features.
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <Calculator className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700">Smart Pacing</h4>
+                      <h4 className="text-xs font-bold text-slate-700">Updates Settings</h4>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                        Ensures weekly weighting columns exist.
+                        Adds support for the new Smart Pacing (Weekly Weights) feature.
                       </p>
                     </div>
                   </div>
@@ -136,11 +149,10 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
               </div>
             </div>
 
-            {/* Right Column: Code */}
             <div className="lg:col-span-2 flex flex-col h-full min-h-[400px]">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Database className="w-4 h-4 text-slate-400" /> Schema Script (Updated)
+                  <Database className="w-4 h-4 text-slate-400" /> Schema Fix Script
                 </label>
                 <button 
                   onClick={copyToClipboard}

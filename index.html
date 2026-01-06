@@ -12,35 +12,73 @@
         font-family: 'Inter', sans-serif;
         background-color: #f8fafc;
         color: #0f172a;
+        -webkit-font-smoothing: antialiased;
       }
 
-      /* Custom Animations */
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
+      /* --- Global Interactions --- */
+      
+      /* Make all buttons feel physical */
+      button {
+        transition-property: transform, background-color, border-color, color, box-shadow;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        transition-duration: 150ms;
       }
-      @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes scaleIn {
-        from { opacity: 0; transform: scale(0.95); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      @keyframes slideInRight {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
+      button:active {
+        transform: scale(0.96);
       }
       
-      .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
-      .animate-fade-in-up { animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-slide-in-right { animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      /* --- Keyframes & Animations --- */
 
-      /* Stagger delays */
-      .delay-100 { animation-delay: 100ms; }
-      .delay-200 { animation-delay: 200ms; }
-      .delay-300 { animation-delay: 300ms; }
+      /* Spring Fade In Up */
+      @keyframes fadeInUp {
+        0% { opacity: 0; transform: translateY(15px) scale(0.98); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* Spring Modal Enter */
+      @keyframes modalEnter {
+        0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      /* Spring Modal Exit */
+      @keyframes modalExit {
+        0% { opacity: 1; transform: scale(1) translateY(0); }
+        100% { opacity: 0; transform: scale(0.95) translateY(10px); }
+      }
+
+      /* Backdrop Fade In */
+      @keyframes backdropEnter {
+        from { opacity: 0; backdrop-filter: blur(0px); }
+        to { opacity: 1; backdrop-filter: blur(4px); }
+      }
+
+      /* Backdrop Fade Out */
+      @keyframes backdropExit {
+        from { opacity: 1; backdrop-filter: blur(4px); }
+        to { opacity: 0; backdrop-filter: blur(0px); }
+      }
+
+      /* Classes */
+      .animate-fade-in-up { 
+        animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      
+      /* Modal Classes */
+      .modal-backdrop-enter {
+        animation: backdropEnter 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .modal-backdrop-exit {
+        animation: backdropExit 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        pointer-events: none;
+      }
+
+      .modal-content-enter {
+        animation: modalEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; /* Spring effect */
+      }
+      .modal-content-exit {
+        animation: modalExit 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
 
       /* Scrollbar beautification */
       ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -50,9 +88,9 @@
       
       /* Glass utilities */
       .glass {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
       }
     </style>
   <script type="importmap">

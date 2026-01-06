@@ -16,11 +16,15 @@ const IconMap: Record<string, any> = {
 
 const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, userName, onClose }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'achievements'>('profile');
+  const [isClosing, setIsClosing] = useState(false);
 
-  // Calculate Stats
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
+
   const totalXP = calculateXP(manuscripts, target);
   const userLevel = calculateLevel(totalXP);
-  
   const unlockedCount = ACHIEVEMENTS.filter(a => a.condition(manuscripts, target)).length;
   const totalAchievements = ACHIEVEMENTS.length;
   
@@ -35,8 +39,8 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row h-full md:h-[600px]">
+    <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+      <div className={`bg-slate-50 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row h-full md:h-[600px] ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         
         {/* Sidebar Navigation */}
         <div className="w-full md:w-64 bg-slate-900 text-white flex flex-col p-6 shrink-0">
@@ -76,7 +80,7 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
            </nav>
 
            <div className="mt-auto pt-6 border-t border-slate-700">
-             <button onClick={onClose} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors">
+             <button onClick={handleClose} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors">
                 <X className="w-4 h-4" /> Close Panel
              </button>
            </div>
@@ -85,7 +89,6 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
         {/* Main Content Area */}
         <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 relative">
           
-          {/* Top Bar Stats (Mobile only essentially, or consistent header) */}
           <div className="p-6 border-b border-slate-200 bg-white flex justify-between items-center">
              <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-inner">
@@ -107,11 +110,8 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-            
             {activeTab === 'profile' && (
               <div className="space-y-8 animate-fade-in">
-                 
-                 {/* Level Progress */}
                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-5">
                        <Sparkles className="w-32 h-32" />
@@ -127,13 +127,9 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
                            style={{ width: `${userLevel.progressPercent}%` }}
                          ></div>
                       </div>
-                      <p className="mt-3 text-xs text-slate-400 text-center">
-                        Keep completing manuscripts and unlocking badges to earn XP and new titles.
-                      </p>
                     </div>
                  </div>
 
-                 {/* Daily Quests */}
                  <div>
                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                      <Scroll className="w-5 h-5 text-indigo-500" /> Daily Quests
@@ -244,7 +240,6 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
                   </div>
                </div>
             )}
-
           </div>
         </div>
       </div>

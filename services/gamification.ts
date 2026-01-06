@@ -19,12 +19,20 @@ const isToday = (dateString?: string) => {
          date.getFullYear() === now.getFullYear();
 };
 
+const getLocalDateKey = (dateString?: string) => {
+  if (!dateString) return null;
+  const d = new Date(dateString);
+  // Returns YYYY-M-D key based on local time to group daily work correctly
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+
 const getMaxDailyCount = (mss: Manuscript[]) => {
     const counts: Record<string, number> = {};
     mss.forEach(m => {
         if (m.status === Status.WORKED) {
-            const date = (m.completedDate || m.dateStatusChanged || '').split('T')[0];
-            if (date) counts[date] = (counts[date] || 0) + 1;
+            const rawDate = m.completedDate || m.dateStatusChanged;
+            const key = getLocalDateKey(rawDate);
+            if (key) counts[key] = (counts[key] || 0) + 1;
         }
     });
     return Math.max(0, ...Object.values(counts));
@@ -34,7 +42,55 @@ const getUniqueJournals = (mss: Manuscript[]) => {
     return new Set(mss.filter(m => m.journalCode).map(m => m.journalCode)).size;
 };
 
-// --- Daily Quests ---
+// --- Historical Daily Quest Calculator ---
+// This ensures XP is kept for previous days' accomplishments
+const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
+    const workedCounts: Record<string, number> = {};
+    const queryCounts: Record<string, number> = {};
+
+    mss.forEach(m => {
+        // 1. Worked Counts Grouped by Day
+        if (m.status === Status.WORKED) {
+             const rawDate = m.completedDate || m.dateStatusChanged;
+             const key = getLocalDateKey(rawDate);
+             if (key) {
+                 workedCounts[key] = (workedCounts[key] || 0) + 1;
+             }
+        }
+
+        // 2. Query Counts Grouped by Day
+        // Check dateQueried first (persistent), then status change if pending
+        let queryKey: string | null = null;
+        
+        if (m.dateQueried) {
+            queryKey = getLocalDateKey(m.dateQueried);
+        } else if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
+            queryKey = getLocalDateKey(m.dateStatusChanged || m.dateUpdated);
+        }
+
+        if (queryKey) {
+            queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
+        }
+    });
+
+    let xp = 0;
+
+    // Sum Worked XP for every eligible day in history
+    Object.values(workedCounts).forEach(count => {
+        if (count >= 5) xp += 100; // Reward for 'Daily Grind'
+        if (count >= 15) xp += 300; // Reward for 'High Volume' (Stacks)
+    });
+
+    // Sum Query XP for every eligible day in history
+    Object.values(queryCounts).forEach(count => {
+        if (count >= 2) xp += 150; // Reward for 'Query Crusher'
+    });
+
+    return xp;
+};
+
+// --- Daily Quests (For UI Display Only) ---
+// These are used to show "Today's Progress", but XP calculation now uses the historical function above.
 export const DAILY_QUESTS: Quest[] = [
   {
     id: 'daily_grind',
@@ -51,8 +107,17 @@ export const DAILY_QUESTS: Quest[] = [
     description: 'Process 2 Pending items (JM/TL/CED) today.',
     target: 2,
     rewardXP: 150,
-    progress: (mss) => mss.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)).length,
-    isCompleted: (mss) => mss.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)).length >= 2
+    // Updated logic to count queries even if they were resolved later today (using dateQueried)
+    progress: (mss) => mss.filter(m => {
+        if (m.dateQueried && isToday(m.dateQueried)) return true;
+        if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
+        return false;
+    }).length,
+    isCompleted: (mss) => mss.filter(m => {
+        if (m.dateQueried && isToday(m.dateQueried)) return true;
+        if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
+        return false;
+    }).length >= 2
   },
   {
     id: 'power_hour',
@@ -743,12 +808,9 @@ export const calculateXP = (manuscripts: Manuscript[], target: number): number =
         }
     });
 
-    // 3. XP for Daily Quests (Calculated in real-time)
-    DAILY_QUESTS.forEach(q => {
-        if (q.isCompleted(manuscripts)) {
-            xp += q.rewardXP;
-        }
-    });
+    // 3. XP for Daily Quests (HISTORICAL)
+    // We calculate this by looking at all past days, not just today
+    xp += calculateHistoricalDailyXP(manuscripts);
 
     return xp;
 };

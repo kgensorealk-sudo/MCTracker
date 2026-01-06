@@ -24,6 +24,7 @@ export interface Manuscript {
   dateUpdated: string; // ISO string
   dateStatusChanged?: string; // ISO string - New field for tracking exact completion/status change time
   queryReason?: string; // Reason for the query (e.g. Figure Replacement, Missing Info)
+  dateQueried?: string; // ISO string - Persists the date a query was raised even if status changes later
   notes: Note[];
   priority: 'Normal' | 'High' | 'Urgent';
 }

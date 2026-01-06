@@ -72,9 +72,16 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
              workDates.add(d);
          }
       }
-      // QUERIED (Pending JM/TL/CED)
-      // We count them as 'queried' on the day the status changed to pending
-      if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
+      
+      // QUERIED (Pending JM/TL/CED) - New Robust Logic
+      // Priority 1: Use persistent dateQueried if available (Handles resolved queries)
+      if (m.dateQueried) {
+         const d = m.dateQueried.split('T')[0];
+         if (!dailyStats[d]) dailyStats[d] = { worked: 0, queried: 0 };
+         dailyStats[d].queried++;
+      } 
+      // Priority 2: Fallback for old data - use current status date if currently pending
+      else if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
          const raw = m.dateStatusChanged || m.dateUpdated;
          if (raw) {
             const d = raw.split('T')[0];

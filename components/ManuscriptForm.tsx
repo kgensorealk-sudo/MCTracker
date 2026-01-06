@@ -12,6 +12,9 @@ interface ManuscriptFormProps {
 }
 
 const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, onCancel, isQueueMode = false, queueLength = 0, existingManuscripts }) => {
+  // Animation State
+  const [isClosing, setIsClosing] = useState(false);
+
   const [formData, setFormData] = useState<Partial<Manuscript>>(
     initialData || {
       manuscriptId: '',
@@ -26,41 +29,40 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
   );
   
   const [error, setError] = useState<string | null>(null);
-
-  // Keep track of status to auto-update dateStatusChanged
   const [prevStatus, setPrevStatus] = useState<Status>(initialData?.status || Status.UNTOUCHED);
   
-  // Note/Remark Logic
   const [currentNote, setCurrentNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
-  // Update form data when initialData changes (e.g. queue navigation)
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
       setPrevStatus(initialData.status);
-      // Clear local inputs
       setCurrentNote('');
       setEditingNoteId(null);
       setError(null);
     }
-  }, [initialData?.id]); // Only trigger when ID changes
+  }, [initialData?.id]);
 
-  // Auto-update status date when status changes
   useEffect(() => {
     if (formData.status && formData.status !== prevStatus) {
       const now = new Date().toISOString();
       const updates: Partial<Manuscript> = { dateStatusChanged: now };
-      
-      // If moving to WORKED and no completedDate is set, default to now
       if (formData.status === Status.WORKED && !formData.completedDate) {
         updates.completedDate = now;
       }
-      
       setFormData(prev => ({ ...prev, ...updates }));
       setPrevStatus(formData.status);
     }
   }, [formData.status, prevStatus, formData.completedDate]);
+
+  // Graceful Close Handler
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onCancel();
+    }, 200); // Match animation duration
+  };
 
   const formatDateForInput = (isoString?: string) => {
     if (!isoString) return '';
@@ -75,18 +77,16 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
     if (!currentNote.trim()) return;
 
     if (editingNoteId) {
-      // Update existing note
       setFormData(prev => ({
         ...prev,
         notes: prev.notes?.map(n => 
           n.id === editingNoteId 
-            ? { ...n, content: currentNote, timestamp: Date.now() } // Update timestamp on edit
+            ? { ...n, content: currentNote, timestamp: Date.now() } 
             : n
         ) || []
       }));
       setEditingNoteId(null);
     } else {
-      // Add new note
       const newNote: Note = {
         id: Date.now().toString(),
         content: currentNote,
@@ -116,8 +116,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
         ...prev,
         notes: prev.notes?.filter(n => n.id !== noteId) || []
       }));
-      
-      // If we were editing the deleted note, clear the input
       if (editingNoteId === noteId) {
         handleCancelEdit();
       }
@@ -127,10 +125,8 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
     if (!formData.manuscriptId || !formData.journalCode) return;
 
-    // Check for Duplicate ID
     const duplicate = existingManuscripts.find(
        m => m.manuscriptId.toLowerCase() === formData.manuscriptId?.toLowerCase() && m.id !== (initialData?.id || '')
     );
@@ -153,12 +149,15 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       dateStatusChanged: formData.dateStatusChanged || new Date().toISOString(),
       notes: formData.notes || [],
     };
-    onSave(manuscript);
+    
+    // For save, we usually don't need exit animation, but let's do it for consistency
+    setIsClosing(true);
+    setTimeout(() => onSave(manuscript), 200);
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 animate-scale-in">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         <div className="flex justify-between items-center p-6 border-b border-slate-100 sticky top-0 bg-white/95 backdrop-blur z-10">
           <div>
             <h2 className="text-xl font-bold text-slate-800">
@@ -166,7 +165,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
             </h2>
             {isQueueMode && <p className="text-xs text-blue-600 font-medium">Bulk Mode: Verify details and click Next</p>}
           </div>
-          <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5 text-slate-500" />
           </button>
         </div>
@@ -191,7 +190,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                 value={formData.manuscriptId}
                 onChange={e => {
                   setFormData({...formData, manuscriptId: e.target.value});
-                  setError(null); // Clear duplicate error on typing
+                  setError(null);
                 }}
               />
             </div>
@@ -342,7 +341,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
               )}
             </div>
             
-            <div className="bg-slate-50/50 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 border border-slate-200 shadow-inner">
+            <div className="bg-slate-50/50 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 border border-slate-200 shadow-inner custom-scrollbar">
               {formData.notes?.length === 0 && <p className="text-slate-400 text-sm text-center py-2">No remarks added yet.</p>}
               {formData.notes?.map(note => (
                 <div key={note.id} className={`text-sm bg-white p-3 rounded-lg border shadow-sm flex justify-between items-start group transition-all ${
@@ -378,7 +377,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleClose}
               className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold transition-colors"
             >
               {isQueueMode ? 'Skip Remaining' : 'Cancel'}

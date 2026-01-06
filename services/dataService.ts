@@ -13,7 +13,8 @@ const mapToManuscript = (row: any): Manuscript => ({
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
   dateStatusChanged: row.date_status_changed,
-  queryReason: row.query_reason, // Replaces issue_types
+  queryReason: row.query_reason, 
+  dateQueried: row.date_queried,
   notes: row.notes || []
 });
 
@@ -47,7 +48,6 @@ export const dataService = {
   async createManuscript(m: Manuscript) {
     if (!isSupabaseConfigured) {
       const current = await this.getManuscripts();
-      // Ensure we have an ID (Frontend usually provides one, but just in case)
       const newItem = { ...m, id: m.id || crypto.randomUUID() };
       const updated = [newItem, ...current];
       localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
@@ -69,32 +69,41 @@ export const dataService = {
         date_updated: new Date().toISOString(),
         date_status_changed: m.dateStatusChanged,
         query_reason: m.queryReason,
+        date_queried: m.dateQueried,
         notes: m.notes
     };
 
-    const { data, error } = await supabase
-      .from('manuscripts')
-      .insert([payload])
-      .select()
-      .single();
+    // Retry loop for schema mismatches (handles multiple missing columns sequentially)
+    let attempt = 0;
+    const maxAttempts = 3; 
 
-    if (error) {
-        // Fallback: If query_reason column missing, retry without it
-        if (error.code === '42703' && error.message?.includes('query_reason')) {
-            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying insert without it.");
-            delete payload.query_reason;
-            const { data: retryData, error: retryError } = await supabase
-                .from('manuscripts')
-                .insert([payload])
-                .select()
-                .single();
-            
-            if (retryError) throw retryError;
-            return mapToManuscript(retryData);
+    while (attempt < maxAttempts) {
+        const { data, error } = await supabase
+          .from('manuscripts')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (!error) {
+            return mapToManuscript(data);
         }
+
+        // Check for undefined column error (Postgres code 42703)
+        if (error.code === '42703') {
+            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
+                               error.message?.includes('date_queried') ? 'date_queried' : null;
+            
+            if (missingCol && payload[missingCol] !== undefined) {
+                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying insert without it.`);
+                delete payload[missingCol];
+                attempt++;
+                continue;
+            }
+        }
+        
         throw error;
     }
-    return mapToManuscript(data);
+    throw new Error("Failed to create manuscript: Database schema incompatible.");
   },
 
   async updateManuscript(m: Manuscript) {
@@ -119,45 +128,47 @@ export const dataService = {
         date_updated: new Date().toISOString(),
         date_status_changed: m.dateStatusChanged,
         query_reason: m.queryReason,
+        date_queried: m.dateQueried,
         notes: m.notes
     };
 
-    const { data, error } = await supabase
-      .from('manuscripts')
-      .update(payload)
-      .eq('id', m.id)
-      .eq('user_id', user.id) // Ensure we only update our own records
-      .select()
-      .single();
+    let attempt = 0;
+    const maxAttempts = 3;
 
-    if (error) {
-        // Fallback: If query_reason column missing, retry without it
-        if (error.code === '42703' && error.message?.includes('query_reason')) {
-            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying update without it.");
-            delete payload.query_reason;
-            const { data: retryData, error: retryError } = await supabase
-                .from('manuscripts')
-                .update(payload)
-                .eq('id', m.id)
-                .eq('user_id', user.id)
-                .select()
-                .single();
-            
-            if (retryError) throw retryError;
-            return mapToManuscript(retryData);
+    while (attempt < maxAttempts) {
+        const { data, error } = await supabase
+          .from('manuscripts')
+          .update(payload)
+          .eq('id', m.id)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        if (!error) {
+            return mapToManuscript(data);
+        }
+
+        if (error.code === '42703') {
+            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
+                               error.message?.includes('date_queried') ? 'date_queried' : null;
+
+            if (missingCol && payload[missingCol] !== undefined) {
+                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying update without it.`);
+                delete payload[missingCol];
+                attempt++;
+                continue;
+            }
         }
         throw error;
     }
-    return mapToManuscript(data);
+    throw new Error("Failed to update manuscript: Database schema incompatible.");
   },
 
   async updateManuscripts(ids: string[], updates: Partial<Manuscript>) {
-    // Helper to apply updates locally
     const applyUpdates = (original: Manuscript) => ({
        ...original,
        ...updates,
        dateUpdated: new Date().toISOString(),
-       // If status changes, update status date
        dateStatusChanged: (updates.status && updates.status !== original.status) 
           ? new Date().toISOString() 
           : original.dateStatusChanged
@@ -175,7 +186,6 @@ export const dataService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    // Convert camelCase updates to snake_case for DB
     const dbUpdates: any = {
        date_updated: new Date().toISOString()
     };
@@ -184,28 +194,34 @@ export const dataService = {
     if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
     if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
     if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
+    if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
     
-    const { error } = await supabase
-      .from('manuscripts')
-      .update(dbUpdates)
-      .in('id', ids)
-      .eq('user_id', user.id);
+    let attempt = 0;
+    const maxAttempts = 3;
 
-    if (error) {
-        // Fallback
-        if (error.code === '42703' && error.message?.includes('query_reason')) {
-            console.warn("Database schema mismatch: 'query_reason' column missing. Retrying bulk update without it.");
-            delete dbUpdates.query_reason;
-            const { error: retryError } = await supabase
-                .from('manuscripts')
-                .update(dbUpdates)
-                .in('id', ids)
-                .eq('user_id', user.id);
-            if (retryError) throw retryError;
-            return;
+    while (attempt < maxAttempts) {
+        const { error } = await supabase
+          .from('manuscripts')
+          .update(dbUpdates)
+          .in('id', ids)
+          .eq('user_id', user.id);
+
+        if (!error) return;
+
+        if (error.code === '42703') {
+            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
+                               error.message?.includes('date_queried') ? 'date_queried' : null;
+            
+            if (missingCol && dbUpdates[missingCol] !== undefined) {
+                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying bulk update without it.`);
+                delete dbUpdates[missingCol];
+                attempt++;
+                continue;
+            }
         }
         throw error;
     }
+    throw new Error("Failed to bulk update: Database schema incompatible.");
   },
 
   async deleteManuscript(id: string) {
@@ -266,9 +282,6 @@ export const dataService = {
     }
 
     // Determine weekly weights.
-    // Logic: If 'weekly_weights' doesn't exist in DB (it might not yet), 
-    // fall back to 'exclude_weekends' boolean.
-    // If that doesn't exist, default to [1,1,1,1,1,1,1].
     let weeklyWeights = data.weekly_weights;
     if (!weeklyWeights) {
       if (data.exclude_weekends) {
@@ -319,7 +332,6 @@ export const dataService = {
     // --- Strategy: 3-Tier Fallback Save ---
     
     // Attempt 1: Full Update (Preferred - New Schema)
-    // Tries to save 'weekly_weights' AND 'days_off'
     const { error: err1 } = await supabase
       .from('user_settings')
       .update({ 
@@ -343,7 +355,6 @@ export const dataService = {
         console.warn("Primary schedule update failed (New Schema). Attempting legacy fallback.");
 
         // Attempt 2: Legacy Update (Exclude Weekends)
-        // Convert weights back to simple boolean if possible
         const excludeWeekends = (schedule.weeklyWeights[0] === 0 && schedule.weeklyWeights[6] === 0);
         
         const { error: err2 } = await supabase
@@ -356,12 +367,11 @@ export const dataService = {
 
         if (!err2) return; // Success on legacy!
 
-        // If err2 was ALSO a schema error (even legacy column missing), try minimal
+        // If err2 was ALSO a schema error, try minimal
         if (isSchemaError(err2)) {
              console.warn("Legacy schedule update failed. Attempting minimal save (Days Off only).");
              
              // Attempt 3: Minimal Update (Days Off only)
-             // This should almost always work if the table exists
              const { error: err3 } = await supabase
                 .from('user_settings')
                 .update({ 
@@ -371,15 +381,12 @@ export const dataService = {
             
             if (!err3) return; // Success on minimal!
             
-             // If even minimal fails, throw the minimal error
              throw new Error("DB Update Failed (Minimal): " + err3.message);
         }
         
-        // If err2 failed but NOT because of schema (e.g. permission/network), throw it
         throw new Error("DB Update Failed (Legacy): " + err2.message);
     }
 
-    // If err1 failed but NOT because of schema, throw it
     throw new Error("DB Update Failed: " + err1.message);
   }
 };

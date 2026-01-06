@@ -11,6 +11,12 @@ interface BulkImportModalProps {
 const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, existingManuscripts }) => {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   const parseDate = (dateStr?: string): string | null => {
     if (!dateStr || !dateStr.trim()) return null;
@@ -30,30 +36,21 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
       const newManuscripts: Manuscript[] = [];
       let skippedCount = 0;
       
-      // Create a Set of existing IDs for fast lookup (case-insensitive)
       const existingIds = new Set(existingManuscripts.map(m => m.manuscriptId.toLowerCase()));
-      // Also track IDs being added in this batch to prevent duplicates within the paste itself
       const currentBatchIds = new Set<string>();
 
-      // Skip header if detected
       const firstLineLower = lines[0].toLowerCase();
       const startIndex = (firstLineLower.includes('job name') || firstLineLower.includes('due date')) ? 1 : 0;
 
       for (let i = startIndex; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-
-        // Split by tab (Excel/Sheets standard copy format)
         const parts = line.split('\t');
-        
-        // Skip if not enough data (at least Job Name required)
         if (parts.length < 1) continue;
 
-        // Mapping based on: Job Name | Due Date | Date Sent | Date Returned | Remarks
         const jobName = parts[0]?.trim();
         if (!jobName) continue;
 
-        // DUPLICATE CHECK
         const lowerJobName = jobName.toLowerCase();
         if (existingIds.has(lowerJobName) || currentBatchIds.has(lowerJobName)) {
           skippedCount++;
@@ -65,31 +62,21 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
         const dateReturnedStr = parts[3]?.trim();
         const remarks = parts[4]?.trim() || '';
 
-        // Extract Journal Code (e.g., BITEB_102489 -> BITEB)
         const journalCode = jobName.includes('_') ? jobName.split('_')[0] : 'UNKNOWN';
 
-        // Determine Status
-        let status = Status.UNTOUCHED; // Default is now UNTOUCHED
+        let status = Status.UNTOUCHED;
         if (dateReturnedStr) {
           status = Status.WORKED;
         } else if (remarks.toLowerCase().includes('query')) {
-          status = Status.PENDING_JM; // Default "Query" import to JM Pending
+          status = Status.PENDING_JM; 
         }
 
-        // Determine Priority
-        // Updated logic: 'PRIORITY' keyword no longer sets High priority per user request.
         let priority: 'Normal' | 'High' | 'Urgent' = 'Normal';
         const remarksUpper = remarks.toUpperCase();
         if (remarksUpper.includes('URGENT')) priority = 'Urgent';
-        // else if (remarksUpper.includes('PRIORITY')) priority = 'High'; // Disabled
 
-        // Dates
         const dateReceived = parseDate(dateSentStr) || new Date().toISOString();
         const dueDate = parseDate(dueDateStr) || undefined;
-        // Status Change Date logic: 
-        // If Returned, use Date Returned. 
-        // If Queried/Pending, use today (as we are importing it now) or Date Sent if preferred.
-        // We default to today for import time, unless Date Returned is explicit.
         const dateReturned = parseDate(dateReturnedStr);
         const dateStatusChanged = dateReturned || new Date().toISOString();
         
@@ -104,11 +91,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
           dateUpdated: new Date().toISOString(),
           dateStatusChanged: dateStatusChanged,
           completedDate: status === Status.WORKED ? (dateReturned || new Date().toISOString()) : undefined,
+          dateQueried: status === Status.PENDING_JM ? (dateReceived || new Date().toISOString()) : undefined,
+          queryReason: status === Status.PENDING_JM ? "Imported Query" : undefined,
           notes: []
         };
 
-        // Add Remarks as notes
-        // Logic: Ignore "PRIORITY" string as a remark.
         if (remarks && remarks.toUpperCase() !== 'PRIORITY') {
           manuscript.notes.push({
             id: crypto.randomUUID(),
@@ -131,15 +118,14 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
         return;
       }
 
-      // If we have valid items, perform import
-      onImport(newManuscripts);
-      
-      // If some were skipped, alert the user but close on success
-      if (skippedCount > 0) {
-        alert(`Imported ${newManuscripts.length} items. Skipped ${skippedCount} duplicates.`);
-      }
-      
-      onClose();
+      setIsClosing(true);
+      setTimeout(() => {
+        onImport(newManuscripts);
+        if (skippedCount > 0) {
+          alert(`Imported ${newManuscripts.length} items. Skipped ${skippedCount} duplicates.`);
+        }
+        onClose();
+      }, 200);
 
     } catch (err) {
       console.error(err);
@@ -148,8 +134,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+    <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+      <div className={`bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-100 rounded-lg">
@@ -160,7 +146,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
               <p className="text-sm text-slate-500">Paste rows from your spreadsheet</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5 text-slate-500" />
           </button>
         </div>
@@ -173,12 +159,6 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
             <div className="font-mono bg-white/50 p-2 rounded border border-blue-100 mt-2">
               Job Name &nbsp;|&nbsp; Due Date &nbsp;|&nbsp; Date Sent &nbsp;|&nbsp; Date Returned &nbsp;|&nbsp; Remarks
             </div>
-            <p className="mt-2 text-blue-600 text-xs">
-              * "Job Name" maps to Manuscript ID & Journal.<br/>
-              * <strong>Duplicates:</strong> Rows with existing Manuscript IDs will be skipped automatically.<br/>
-              * "Date Returned" determines if status is 'Worked'.<br/>
-              * "Remarks" containing 'URGENT' sets urgent priority.
-            </p>
           </div>
 
           <textarea
@@ -198,7 +178,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
 
         <div className="p-6 border-t border-slate-100 bg-slate-50 rounded-b-xl flex justify-end gap-3">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 text-slate-600 hover:bg-white hover:shadow-sm rounded-lg font-medium transition-all border border-transparent hover:border-slate-200"
           >
             Cancel

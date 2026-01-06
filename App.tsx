@@ -236,7 +236,8 @@ const App: React.FC = () => {
       setView('list'); 
     } catch (error: any) {
       console.error("Bulk import failed:", error);
-      alert(`Some items failed to import: ${error.message || 'Unknown error'}`);
+      const errMsg = error.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+      alert(`Some items failed to import: ${errMsg}`);
       loadData();
     } finally {
       setDataLoading(false);

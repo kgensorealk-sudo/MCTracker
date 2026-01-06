@@ -8,7 +8,7 @@ interface ManuscriptListProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Manuscript>) => void;
   onBulkUpdate: (ids: string[], updates: Partial<Manuscript>) => void;
-  onBulkReview?: (ids: string[]) => void; // New optional prop for review mode
+  onBulkReview?: (ids: string[]) => void; 
   activeFilter: Status | 'ALL' | 'PENDING_GROUP';
 }
 
@@ -16,25 +16,23 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP'>(activeFilter);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
-  // Date Filtering State
   const [showDateFilters, setShowDateFilters] = useState(false);
   const [dateRange, setDateRange] = useState({ 
     start: '', 
     end: '', 
-    field: 'dateReceived' // Default to Date Sent
+    field: 'dateReceived' 
   });
 
   // Query Modal State
   const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
   const [queryNote, setQueryNote] = useState('');
+  const [isQueryModalClosing, setIsQueryModalClosing] = useState(false);
 
   useEffect(() => {
     setFilterStatus(activeFilter);
-    setSelectedIds(new Set()); // Reset selection on filter change
+    setSelectedIds(new Set()); 
   }, [activeFilter]);
 
-  // Compute counts for the tabs
   const pendingCount = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length;
   const counts = {
     ALL: manuscripts.length,
@@ -44,7 +42,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   const filtered = manuscripts.filter(m => {
-    // 1. Status Filter
     let matchesStatus = false;
     if (filterStatus === 'ALL') matchesStatus = true;
     else if (filterStatus === 'PENDING_GROUP') {
@@ -53,19 +50,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       matchesStatus = m.status === filterStatus;
     }
 
-    // 2. Search Filter
     const matchesSearch = 
       m.manuscriptId.toLowerCase().includes(search.toLowerCase()) || 
       m.journalCode.toLowerCase().includes(search.toLowerCase());
 
-    // 3. Date Filter
     const matchesDate = (() => {
       if (!dateRange.start && !dateRange.end) return true;
-      
       let dateValue: string | undefined;
-      
       if (dateRange.field === 'dateStatusChanged') {
-           // For Worked items, we prioritize completedDate. For others, status changed date.
            dateValue = (m.status === Status.WORKED && m.completedDate) 
              ? m.completedDate 
              : (m.dateStatusChanged || m.dateUpdated);
@@ -74,22 +66,17 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       } else {
            dateValue = m.dateReceived;
       }
-      
       if (!dateValue) return false;
-      
       const itemTime = new Date(dateValue).getTime();
       if (isNaN(itemTime)) return false;
-      
       const startTime = dateRange.start ? new Date(dateRange.start).setHours(0,0,0,0) : -Infinity;
       const endTime = dateRange.end ? new Date(dateRange.end).setHours(23,59,59,999) : Infinity;
-      
       return itemTime >= startTime && itemTime <= endTime;
     })();
 
     return matchesStatus && matchesSearch && matchesDate;
   });
 
-  // --- Selection Logic ---
   const handleSelectAll = () => {
     if (selectedIds.size === filtered.length && filtered.length > 0) {
       setSelectedIds(new Set());
@@ -108,7 +95,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     setSelectedIds(newSelected);
   };
 
-  // Direct Update (no modal)
   const handleDirectBulkStatusChange = (status: Status) => {
     if (window.confirm(`Are you sure you want to mark ${selectedIds.size} items as ${status}?`)) {
       onBulkUpdate(Array.from(selectedIds), { status });
@@ -116,7 +102,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
-  // Interactive Review Mode
   const handleReviewBulk = () => {
     if (onBulkReview) {
       onBulkReview(Array.from(selectedIds));
@@ -124,16 +109,13 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
-  // --- Quick Action Handlers ---
   const handleQuickAction = (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => {
-    // Intercept JM Query to show modal
     if (action === 'QUERY_JM') {
       setQueryModal({ isOpen: true, manuscript: m });
-      setQueryNote(''); // Reset input
+      setQueryNote(''); 
       return;
     }
 
-    // Intercept WORKED action to require confirmation
     if (action === 'WORKED') {
       const isConfirmed = window.confirm(`Are you sure you want to mark ${m.manuscriptId} as WORKED?`);
       if (!isConfirmed) return;
@@ -148,8 +130,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     if (action === 'WORKED') {
       updates.status = Status.WORKED;
       updates.completedDate = now;
-
-      // Add Note Logic
       const noteContent = m.status === Status.PENDING_JM ? "Resolved" : "Done";
       const newNote = {
         id: crypto.randomUUID(),
@@ -158,14 +138,19 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       };
       updates.notes = [newNote, ...(m.notes || [])];
     }
-
     onUpdate(m.id, updates);
   };
 
-  // Submit the JM Query from Modal
+  const handleCloseQueryModal = () => {
+    setIsQueryModalClosing(true);
+    setTimeout(() => {
+        setQueryModal({ isOpen: false, manuscript: null });
+        setIsQueryModalClosing(false);
+    }, 200);
+  };
+
   const handleSubmitQuery = () => {
     if (!queryModal.manuscript) return;
-
     const now = new Date().toISOString();
     const noteContent = queryNote.trim() ? queryNote : "JM Query Raised";
     
@@ -173,35 +158,35 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       status: Status.PENDING_JM,
       dateStatusChanged: now,
       dateUpdated: now,
+      dateQueried: now, 
       notes: [
         { id: crypto.randomUUID(), content: noteContent, timestamp: Date.now() },
         ...(queryModal.manuscript.notes || [])
       ]
     };
 
-    onUpdate(queryModal.manuscript.id, updates);
-    setQueryModal({ isOpen: false, manuscript: null });
-    setQueryNote('');
+    setIsQueryModalClosing(true);
+    setTimeout(() => {
+        onUpdate(queryModal.manuscript!.id, updates);
+        setQueryModal({ isOpen: false, manuscript: null });
+        setQueryNote('');
+        setIsQueryModalClosing(false);
+    }, 200);
   };
 
   const downloadCSV = () => {
     const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
     const rows = filtered.map(m => {
-      // Concatenate all notes for CSV
       const notesContent = m.notes
         .map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`)
         .join('; ');
-
-      // Logic for Submitted Date: Only show if WORKED
       let submittedDate = '';
       if (m.status === Status.WORKED) {
           const rawDate = m.completedDate || m.dateStatusChanged || m.dateUpdated;
           submittedDate = new Date(rawDate).toLocaleDateString();
       }
-      
       const statusDateRaw = m.dateStatusChanged || m.dateUpdated;
       const statusDate = new Date(statusDateRaw).toLocaleDateString();
-
       return [
         m.manuscriptId,
         m.journalCode,
@@ -214,12 +199,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         `"${notesContent.replace(/"/g, '""')}"`
       ];
     });
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
-    ].join('\n');
-
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
@@ -250,7 +230,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
-  // Helper to check if a date is today
   const isToday = (date: Date) => {
     const today = new Date();
     return date.getDate() === today.getDate() &&
@@ -260,34 +239,20 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in-up">
-      {/* Bulk Action Bar (Fixed at bottom) */}
+      {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-6 py-3 shadow-2xl z-50 flex items-center gap-4 animate-fade-in-up border border-slate-700">
            <span className="font-bold text-sm whitespace-nowrap px-2 bg-slate-800 rounded-lg py-1">{selectedIds.size} selected</span>
            <div className="h-4 w-px bg-slate-700"></div>
-           
-           {/* Primary Action: Review & Work */}
-           <button 
-             onClick={handleReviewBulk}
-             className="flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm font-medium"
-             title="Open selected items one by one to mark as worked"
-           >
+           <button onClick={handleReviewBulk} className="flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm font-medium">
              <ListChecks className="w-4 h-4" /> Review & Mark Worked
            </button>
-
            <div className="h-4 w-px bg-slate-700"></div>
-
-           <button 
-             onClick={() => handleDirectBulkStatusChange(Status.PENDING_JM)}
-             className="flex items-center gap-2 hover:text-rose-400 transition-colors text-sm font-medium"
-           >
+           <button onClick={() => handleDirectBulkStatusChange(Status.PENDING_JM)} className="flex items-center gap-2 hover:text-rose-400 transition-colors text-sm font-medium">
              <AlertCircle className="w-4 h-4" /> JM Query
            </button>
            <div className="h-4 w-px bg-slate-700"></div>
-           <button 
-             onClick={() => setSelectedIds(new Set())}
-             className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-full"
-           >
+           <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-full">
              <X className="w-4 h-4" />
            </button>
         </div>
@@ -319,7 +284,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           <div className="flex gap-2 w-full xl:w-auto overflow-x-auto items-center pb-1 xl:pb-0 hide-scrollbar">
             {(['ALL', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
               const statusKey = key === 'ALL' ? 'ALL' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
-              
               return (
                 <button
                   key={key}
@@ -331,14 +295,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   }`}
                 >
                   <span>
-                    {key === 'ALL' ? 'All Files' : 
-                     key === 'PENDING_GROUP' ? 'Pending / Queries' : 
-                     key.charAt(0) + key.slice(1).toLowerCase()}
+                    {key === 'ALL' ? 'All Files' : key === 'PENDING_GROUP' ? 'Pending / Queries' : key.charAt(0) + key.slice(1).toLowerCase()}
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${
-                     filterStatus === statusKey 
-                      ? 'bg-slate-700 text-slate-100' 
-                      : 'bg-slate-100 text-slate-500'
+                     filterStatus === statusKey ? 'bg-slate-700 text-slate-100' : 'bg-slate-100 text-slate-500'
                   }`}>
                     {counts[key as keyof typeof counts]}
                   </span>
@@ -346,17 +306,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               );
             })}
             <div className="h-6 w-px bg-slate-200 mx-2 hidden xl:block"></div>
-            <button
-              onClick={downloadCSV}
-              className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 flex items-center gap-2 whitespace-nowrap transition-all"
-              title="Export to CSV"
-            >
+            <button onClick={downloadCSV} className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 flex items-center gap-2 whitespace-nowrap transition-all">
               <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
             </button>
           </div>
         </div>
 
-        {/* Date Filter Section */}
         {showDateFilters && (
              <div className="px-4 pb-4 flex flex-wrap gap-4 items-center animate-scale-in origin-top border-t border-slate-200 pt-4 bg-slate-50">
                 <div className="flex items-center gap-2">
@@ -374,27 +329,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                 </div>
                 <div className="flex items-center gap-2">
                    <span className="text-sm text-slate-500">From</span>
-                   <input 
-                      type="date" 
-                      className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5"
-                      value={dateRange.start}
-                      onChange={e => setDateRange({...dateRange, start: e.target.value})}
-                   />
+                   <input type="date" className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} />
                 </div>
                 <div className="flex items-center gap-2">
                    <span className="text-sm text-slate-500">To</span>
-                   <input 
-                      type="date" 
-                      className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5"
-                      value={dateRange.end}
-                      onChange={e => setDateRange({...dateRange, end: e.target.value})}
-                   />
+                   <input type="date" className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} />
                 </div>
                 {(dateRange.start || dateRange.end) && (
-                    <button 
-                       onClick={() => setDateRange({...dateRange, start: '', end: ''})}
-                       className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
-                    >
+                    <button onClick={() => setDateRange({...dateRange, start: '', end: ''})} className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded flex items-center gap-1 transition-colors">
                        <X className="w-3 h-3" /> Clear
                     </button>
                 )}
@@ -402,18 +344,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         )}
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto min-h-[400px]">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 w-10">
-                <input 
-                  type="checkbox" 
-                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                  onChange={handleSelectAll}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors"
-                />
+                <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
               </th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Status Date</th>
@@ -437,9 +373,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               </tr>
             )}
             {filtered.map((m) => {
-               const displayDateRaw = m.status === Status.WORKED && m.completedDate 
-                 ? m.completedDate 
-                 : (m.dateStatusChanged || m.dateUpdated);
+               const displayDateRaw = m.status === Status.WORKED && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
                const dateObj = new Date(displayDateRaw);
                const displayDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
                const isActivityToday = isToday(dateObj);
@@ -448,20 +382,11 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                return (
                 <tr key={m.id} className={`group transition-colors duration-200 ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
                   <td className="px-4 py-3">
-                    <input 
-                      type="checkbox" 
-                      checked={isSelected}
-                      onChange={() => handleSelectOne(m.id)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors"
-                    />
+                    <input type="checkbox" checked={isSelected} onChange={() => handleSelectOne(m.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(m.status)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {getStatusBadge(m.status)}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>
-                      {displayDate}
-                    </span>
+                    <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>{displayDate}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
@@ -471,14 +396,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       <div className="text-slate-400 text-xs font-mono">{m.journalCode}</div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                     <div className="text-slate-700">{new Date(m.dateReceived).toLocaleDateString()}</div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                     <div className={`text-slate-700 ${!m.dueDate ? 'text-slate-400 italic' : ''}`}>
-                       {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : 'None'}
-                     </div>
-                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap"><div className="text-slate-700">{new Date(m.dateReceived).toLocaleDateString()}</div></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><div className={`text-slate-700 ${!m.dueDate ? 'text-slate-400 italic' : ''}`}>{m.dueDate ? new Date(m.dueDate).toLocaleDateString() : 'None'}</div></td>
                   <td className="px-4 py-3">
                     <select
                       value={m.priority}
@@ -496,7 +415,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
-                      
                       {m.notes.length > 0 ? (
                         <div className="flex flex-col gap-2">
                           {m.notes.map((note) => (
@@ -504,12 +422,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                               <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{note.content}</div>
                               <div className="text-[10px] text-slate-400 mt-1 text-right flex justify-end items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {new Date(note.timestamp).toLocaleString(undefined, {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
+                                {new Date(note.timestamp).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
                               </div>
                             </div>
                           ))}
@@ -521,47 +434,20 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex justify-end items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      
-                      {/* Quick Action Buttons */}
                       {m.status !== Status.WORKED && (
                         <>
-                          {/* Query Button - Only show for Untouched or other Pending types that aren't JM yet */}
                           {m.status !== Status.PENDING_JM && (
-                            <button
-                              onClick={() => handleQuickAction(m, 'QUERY_JM')}
-                              className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-all shadow-sm hover:shadow"
-                              title="Query to JM"
-                            >
+                            <button onClick={() => handleQuickAction(m, 'QUERY_JM')} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-all shadow-sm hover:shadow" title="Query to JM">
                               <AlertCircle className="w-4 h-4" />
                             </button>
                           )}
-
-                          {/* Mark Worked Button */}
-                          <button
-                            onClick={() => handleQuickAction(m, 'WORKED')}
-                            className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all shadow-sm hover:shadow"
-                            title={m.status === Status.PENDING_JM ? "Mark Resolved" : "Mark Done"}
-                          >
+                          <button onClick={() => handleQuickAction(m, 'WORKED')} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all shadow-sm hover:shadow" title={m.status === Status.PENDING_JM ? "Mark Resolved" : "Mark Done"}>
                             <CheckSquare className="w-4 h-4" />
                           </button>
                         </>
                       )}
-
-                      <button 
-                        onClick={() => onEdit(m)}
-                        className="p-2 text-slate-500 hover:bg-slate-100 hover:text-blue-600 rounded-lg transition-all"
-                        title="Edit Details"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-
-                      <button 
-                        onClick={() => onDelete(m.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <button onClick={() => onEdit(m)} className="p-2 text-slate-500 hover:bg-slate-100 hover:text-blue-600 rounded-lg transition-all" title="Edit Details"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => onDelete(m.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Delete Record"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -571,10 +457,9 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         </table>
       </div>
 
-      {/* Query Modal */}
       {queryModal.isOpen && queryModal.manuscript && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-slate-200">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm ${isQueryModalClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+          <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 ${isQueryModalClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
              <div className="bg-rose-50 p-4 border-b border-rose-100 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                    <div className="p-2 bg-rose-100 rounded-full">
@@ -585,18 +470,13 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       <p className="text-xs text-rose-700">{queryModal.manuscript.manuscriptId}</p>
                    </div>
                 </div>
-                <button 
-                  onClick={() => setQueryModal({isOpen: false, manuscript: null})}
-                  className="p-1 hover:bg-rose-200 rounded-full text-rose-400 hover:text-rose-700 transition-colors"
-                >
+                <button onClick={handleCloseQueryModal} className="p-1 hover:bg-rose-200 rounded-full text-rose-400 hover:text-rose-700 transition-colors">
                    <X className="w-5 h-5" />
                 </button>
              </div>
              
              <div className="p-6">
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                   Query Details / Notes
-                </label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Query Details / Notes</label>
                 <div className="relative">
                   <MessageSquare className="absolute top-3 left-3 w-4 h-4 text-slate-400" />
                   <textarea
@@ -611,18 +491,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
              </div>
 
              <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                <button
-                   onClick={() => setQueryModal({isOpen: false, manuscript: null})}
-                   className="px-4 py-2 text-slate-600 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 rounded-xl text-sm font-medium transition-all"
-                >
-                   Cancel
-                </button>
-                <button
-                   onClick={handleSubmitQuery}
-                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-md shadow-rose-200 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-                >
-                   <Send className="w-4 h-4" /> Confirm Query
-                </button>
+                <button onClick={handleCloseQueryModal} className="px-4 py-2 text-slate-600 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 rounded-xl text-sm font-medium transition-all">Cancel</button>
+                <button onClick={handleSubmitQuery} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-md shadow-rose-200 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"><Send className="w-4 h-4" /> Confirm Query</button>
              </div>
           </div>
         </div>
