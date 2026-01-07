@@ -72,7 +72,7 @@ const HeaderClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="text-right mt-2 sm:mt-0">
+    <div className="text-right mt-2 sm:mt-0 min-w-[140px]">
        <p className="text-2xl font-mono font-medium text-slate-700 tracking-tight">
           {currentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
        </p>
@@ -617,10 +617,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const activeMsg = coachingMessage.messages[activeMsgIndex];
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
+    <div className="space-y-8 animate-fade-in-up pb-12">
       
       {/* Header with Date & Level Banner */}
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col gap-6 border-b border-slate-200/60 pb-6">
         <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center">
           <div>
              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard</h2>
@@ -639,35 +639,35 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Level Banner */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-3 flex items-center gap-4 text-white shadow-md relative overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-4 flex items-center gap-5 text-white shadow-xl shadow-slate-900/10 relative overflow-hidden ring-1 ring-white/10">
            <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
               <Trophy className="w-24 h-24" />
            </div>
            
-           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold border-2 border-slate-700 shadow-lg shrink-0 z-10">
+           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-lg border-4 border-slate-700 shadow-lg shrink-0 z-10">
               {levelData.level}
            </div>
            <div className="flex-1 z-10">
-              <div className="flex justify-between items-end mb-1">
+              <div className="flex justify-between items-end mb-1.5">
                  <div>
                     <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Current Rank</span>
-                    <h3 className="font-bold text-sm leading-tight text-indigo-300">{levelData.title}</h3>
+                    <h3 className="font-bold text-base leading-tight text-indigo-300">{levelData.title}</h3>
                  </div>
                  <span className="text-xs font-mono text-slate-400">
                     {levelData.currentXP} <span className="text-slate-600">/</span> {levelData.nextLevelXP} XP
                  </span>
               </div>
-              <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                 <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-1000" style={{ width: `${levelData.progressPercent}%` }}></div>
+              <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
+                 <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-1000 shadow-[0_0_10px_rgba(168,85,247,0.5)]" style={{ width: `${levelData.progressPercent}%` }}></div>
               </div>
            </div>
         </div>
       </div>
 
       {showScheduleSettings && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-8 animate-fade-in-up backdrop-blur-sm">
            {/* Weekly Routine */}
-           <div className="flex flex-col gap-2">
+           <div className="flex flex-col gap-3">
              <div className="flex items-start gap-3">
                 <div className="p-2 bg-indigo-100 rounded-xl shrink-0">
                   <Briefcase className="w-5 h-5 text-indigo-600" />
@@ -680,21 +680,21 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
              </div>
              
-             <div className="mt-3 grid grid-cols-7 gap-1 sm:gap-2">
+             <div className="mt-2 grid grid-cols-7 gap-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
                   const weight = weights[idx] ?? 1;
                   return (
                     <button
                       key={day}
                       onClick={() => updateWeeklyWeight(idx, weight === 1 ? 0 : 1)}
-                      className={`py-2 rounded-lg text-[10px] sm:text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                      className={`py-2 rounded-lg text-[10px] sm:text-xs font-bold border transition-all flex flex-col items-center gap-1.5 ${
                          weight > 0 
                           ? 'bg-white border-indigo-200 text-indigo-700 shadow-sm' 
-                          : 'bg-indigo-100/50 border-indigo-100 text-indigo-300'
+                          : 'bg-indigo-100/30 border-indigo-100 text-indigo-300'
                       }`}
                     >
                       <span>{day}</span>
-                      <span className={`w-2 h-2 rounded-full ${weight > 0 ? 'bg-emerald-400' : 'bg-slate-300'}`}></span>
+                      <span className={`w-2 h-2 rounded-full ${weight > 0 ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.6)]' : 'bg-slate-300'}`}></span>
                     </button>
                   )
                 })}
@@ -702,7 +702,7 @@ const Dashboard: React.FC<DashboardProps> = ({
            </div>
 
            {/* Toggle Today */}
-           <div className="flex flex-col gap-2">
+           <div className="flex flex-col gap-3">
               <div className="flex items-start gap-3">
                  <div className="p-2 bg-pink-100 rounded-xl shrink-0">
                    <Coffee className="w-5 h-5 text-pink-600" />
@@ -731,12 +731,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <div className="flex items-center gap-2">
                     <button 
                       onClick={() => onUpdateTarget(Math.max(1, target - 5))}
-                      className="w-6 h-6 rounded bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold"
+                      className="w-7 h-7 rounded-lg bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold transition-colors"
                     >-</button>
-                    <span className="text-sm font-mono font-bold w-8 text-center">{target}</span>
+                    <span className="text-base font-mono font-bold w-10 text-center text-indigo-900">{target}</span>
                     <button 
                       onClick={() => onUpdateTarget(target + 5)}
-                      className="w-6 h-6 rounded bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold"
+                      className="w-7 h-7 rounded-lg bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 font-bold transition-colors"
                     >+</button>
                  </div>
               </div>
@@ -745,14 +745,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       )}
 
       {/* Primary Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
         {/* Cycle Progress Card */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Target className="w-16 h-16" />
            </div>
-           <div className="flex justify-between items-start mb-2 relative z-10">
+           <div className="flex justify-between items-start mb-3 relative z-10">
               <div>
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cycle Progress</p>
                  <p className="text-[10px] text-slate-400 mt-0.5">{cycleData.label}</p>
@@ -765,7 +765,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <h3 className="text-3xl font-bold text-slate-800">{stats.cycleWorked}</h3>
               <span className="text-sm text-slate-400 font-medium">/ {target}</span>
            </div>
-           <div className="mt-3 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+           <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full rounded-full transition-all duration-1000 ${cycleData.percentage >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} 
                 style={{ width: `${cycleData.percentage}%` }}
@@ -778,11 +778,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Daily Target Card */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Timer className="w-16 h-16" />
            </div>
-           <div className="flex justify-between items-start mb-2 relative z-10">
+           <div className="flex justify-between items-start mb-3 relative z-10">
               <div>
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Today's Target</p>
                  <p className="text-[10px] text-slate-400 mt-0.5">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</p>
@@ -797,7 +797,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <span className="text-sm text-slate-400 font-medium">/ {dailyStats.target}</span>
            </div>
 
-           <div className="mt-3 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+           <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full rounded-full transition-all duration-500 ${
                   dailyStats.count >= dailyStats.target ? 'bg-emerald-500' : 'bg-indigo-500'
@@ -818,7 +818,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         {/* Pending Card */}
         <div 
            onClick={() => onFilterClick('PENDING_GROUP')}
-           className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer hover:border-amber-200"
+           className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer hover:border-amber-200"
         >
            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <AlertTriangle className="w-16 h-16 text-amber-500" />
@@ -826,20 +826,20 @@ const Dashboard: React.FC<DashboardProps> = ({
            <div className="mb-2 relative z-10">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Actions</p>
            </div>
-           <div className="flex items-center gap-2 mb-3 relative z-10">
+           <div className="flex items-center gap-2 mb-4 relative z-10">
               <h3 className="text-3xl font-bold text-slate-800">{stats.totalPending}</h3>
               {stats.cyclePending > 0 && <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">+{stats.cyclePending} new</span>}
            </div>
-           <div className="grid grid-cols-3 gap-1 relative z-10">
-              <div className="text-center bg-rose-50 rounded p-1">
+           <div className="grid grid-cols-3 gap-2 relative z-10">
+              <div className="text-center bg-rose-50 rounded-lg p-1.5">
                  <div className="text-xs font-bold text-rose-700">{stats.pendingBreakdown.JM}</div>
                  <div className="text-[9px] text-rose-400 font-bold">JM</div>
               </div>
-              <div className="text-center bg-amber-50 rounded p-1">
+              <div className="text-center bg-amber-50 rounded-lg p-1.5">
                  <div className="text-xs font-bold text-amber-700">{stats.pendingBreakdown.TL}</div>
                  <div className="text-[9px] text-amber-400 font-bold">TL</div>
               </div>
-              <div className="text-center bg-violet-50 rounded p-1">
+              <div className="text-center bg-violet-50 rounded-lg p-1.5">
                  <div className="text-xs font-bold text-violet-700">{stats.pendingBreakdown.CED}</div>
                  <div className="text-[9px] text-violet-400 font-bold">CED</div>
               </div>
@@ -847,15 +847,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Insights Card */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Zap className="w-16 h-16 text-blue-500" />
            </div>
-           <div className="mb-2 relative z-10">
+           <div className="mb-4 relative z-10">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Efficiency</p>
            </div>
            
-           <div className="space-y-3 relative z-10">
+           <div className="space-y-4 relative z-10">
               <div className="flex justify-between items-center">
                  <span className="text-xs text-slate-500 font-medium">Avg Turnaround</span>
                  <span className="text-sm font-bold text-slate-800">{insights.tat} <span className="text-[10px] text-slate-400 font-normal">days</span></span>
@@ -892,8 +892,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <p className="text-xs text-slate-500 mt-1">Actual completion vs Ideal pace to hit target</p>
                </div>
                
-               {/* Smart Coaching Message */}
-               <div className={`hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl border max-w-md ${
+               {/* Smart Coaching Message - FIXED HEIGHT */}
+               <div className={`hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl border max-w-md transition-colors h-14 ${
                   coachingMessage.type === 'success' ? 'bg-emerald-50 border-emerald-100' :
                   coachingMessage.type === 'warning' ? 'bg-amber-50 border-amber-100' :
                   coachingMessage.type === 'danger' ? 'bg-rose-50 border-rose-100' :
@@ -907,14 +907,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                   }`}>
                      <Info className="w-3 h-3" />
                   </div>
-                  <div className="flex flex-col min-w-0">
-                     <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  <div className="flex flex-col min-w-0 justify-center w-full">
+                     <span className={`text-[10px] font-bold uppercase tracking-wider leading-none mb-0.5 ${
                         coachingMessage.type === 'success' ? 'text-emerald-800' :
                         coachingMessage.type === 'warning' ? 'text-amber-800' :
                         coachingMessage.type === 'danger' ? 'text-rose-800' :
                         'text-blue-800'
                      }`}>{coachingMessage.title}</span>
-                     <span className="text-xs text-slate-700 font-medium animate-fade-in break-words whitespace-normal">
+                     <span className="text-xs text-slate-700 font-medium animate-fade-in line-clamp-2 leading-tight h-8 flex items-center">
                         {activeMsg}
                      </span>
                   </div>
@@ -955,6 +955,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         strokeDasharray="4 4" 
                         dot={false} 
                         activeDot={false}
+                        isAnimationActive={false}
                      />
 
                      {/* Actual Area */}
@@ -978,7 +979,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
                <BarChart3 className="w-5 h-5 text-emerald-500" /> Last 7 Days
             </h3>
-            <div className="flex-1 min-h-[200px]">
+            {/* FIX: Changed from flex-1 to fixed height to prevent resize loops in Recharts */}
+            <div className="h-[220px] w-full mt-4">
                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={activityData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -1006,6 +1008,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                            return null;
                         }}
                      />
+                     {/* FIX: Re-enabled animation (removed isAnimationActive={false}) */}
                      <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
                         {activityData.map((entry, index) => (
                            <Cell key={`cell-${index}`} fill={entry.count >= (dailyStats.baseDailyTarget || 5) ? '#10b981' : '#94a3b8'} />

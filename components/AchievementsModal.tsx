@@ -39,7 +39,7 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ manuscripts, target, 
   };
 
   return (
-    <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+    <div className={`fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
       <div className={`bg-slate-50 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row h-full md:h-[600px] ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         
         {/* Sidebar Navigation */}

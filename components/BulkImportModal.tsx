@@ -134,7 +134,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
   };
 
   return (
-    <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
+    <div className={`fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
       <div className={`bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div className="flex items-center gap-3">

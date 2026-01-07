@@ -329,41 +329,41 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative">
       {/* Decorative background blob */}
-      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50 to-transparent -z-10 pointer-events-none opacity-60"></div>
+      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 to-transparent -z-10 pointer-events-none"></div>
 
       {/* Header */}
-      <header className="glass border-b border-slate-200/60 sticky top-0 z-30 transition-all">
+      <header className="glass border-b border-slate-200/60 sticky top-0 z-30 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg shadow-lg shadow-blue-500/20">
+            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-black/5">
               <ShieldCheck className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
             {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
             {!isSupabaseConfigured && (
-              <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-600 ml-2" title="Data is saved to your browser (LocalStorage)">
+              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2" title="Data is saved to your browser (LocalStorage)">
                  <WifiOff className="w-3 h-3" /> Offline Mode
               </div>
             )}
           </div>
           
           <div className="flex items-center gap-4">
-            <nav className="flex bg-slate-100/80 p-1 rounded-xl">
+            <nav className="flex bg-slate-100/50 p-1 rounded-xl border border-slate-200/50">
               <button 
                 onClick={() => handleViewChange('dashboard')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'dashboard' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
                 <div className="flex items-center gap-2"><LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Overview</span></div>
               </button>
               <button 
                 onClick={() => handleViewChange('list')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'list' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
                 <div className="flex items-center gap-2"><List className="w-4 h-4" /> <span className="hidden sm:inline">Files</span></div>
               </button>
               <button 
                 onClick={() => handleViewChange('history')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'history' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
               >
                 <div className="flex items-center gap-2"><History className="w-4 h-4" /> <span className="hidden sm:inline">Reports</span></div>
               </button>
@@ -427,34 +427,36 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content with View Transitions */}
       <main className={`flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'list' ? 'max-w-[95%]' : 'max-w-7xl'}`}>
-        {view === 'dashboard' ? (
-          <Dashboard 
-            userName={userName}
-            manuscripts={manuscripts} 
-            target={targetPerCycle}
-            userSchedule={userSchedule}
-            onUpdateTarget={handleUpdateTarget}
-            onFilterClick={handleDashboardFilter}
-            onUpdateSchedule={handleUpdateSchedule}
-          />
-        ) : view === 'list' ? (
-          <ManuscriptList 
-            manuscripts={manuscripts} 
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onUpdate={handleQuickUpdate}
-            onBulkUpdate={handleBulkUpdate}
-            onBulkReview={handleBulkReview} // Passed new handler
-            activeFilter={listFilter}
-          />
-        ) : (
-          <HistoryReport 
-            manuscripts={manuscripts}
-            userName={userName}
-          />
-        )}
+        <div key={view} className="animate-page-enter">
+          {view === 'dashboard' ? (
+            <Dashboard 
+              userName={userName}
+              manuscripts={manuscripts} 
+              target={targetPerCycle}
+              userSchedule={userSchedule}
+              onUpdateTarget={handleUpdateTarget}
+              onFilterClick={handleDashboardFilter}
+              onUpdateSchedule={handleUpdateSchedule}
+            />
+          ) : view === 'list' ? (
+            <ManuscriptList 
+              manuscripts={manuscripts} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onUpdate={handleQuickUpdate}
+              onBulkUpdate={handleBulkUpdate}
+              onBulkReview={handleBulkReview} // Passed new handler
+              activeFilter={listFilter}
+            />
+          ) : (
+            <HistoryReport 
+              manuscripts={manuscripts}
+              userName={userName}
+            />
+          )}
+        </div>
       </main>
 
       {/* Modals */}
