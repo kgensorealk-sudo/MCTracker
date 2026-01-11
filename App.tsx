@@ -11,7 +11,7 @@ import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History, WifiOff, Mail } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
@@ -26,7 +26,7 @@ const App: React.FC = () => {
 
   // UI States
   const [view, setView] = useState<'dashboard' | 'list' | 'history'>('dashboard');
-  const [listFilter, setListFilter] = useState<Status | 'ALL' | 'PENDING_GROUP'>('ALL'); 
+  const [listFilter, setListFilter] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER'>('ALL'); 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isGamificationOpen, setIsGamificationOpen] = useState(false);
@@ -168,9 +168,11 @@ const App: React.FC = () => {
     setDataLoading(true);
 
     const now = new Date().toISOString();
-    const finalUpdates = { ...updates, dateStatusChanged: now };
+    // Using any for finalUpdates to allow dynamic property assignment while respecting interface logic
+    const finalUpdates: any = { ...updates, dateStatusChanged: now };
 
     if (updates.status === Status.WORKED) {
+      // Fix: Corrected property name from completed_date to completedDate to match Manuscript interface
       finalUpdates.completedDate = now;
     }
 

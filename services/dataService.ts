@@ -1,4 +1,3 @@
-
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Manuscript, UserSchedule } from '../types';
 
@@ -9,11 +8,12 @@ const mapToManuscript = (row: any): Manuscript => ({
   journalCode: row.journal_code,
   status: row.status,
   priority: row.priority,
+  // Fix: Object literal may only specify known properties. Using camelCase to match Manuscript interface.
   dateReceived: row.date_received,
   dueDate: row.due_date,
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
-  dateStatus_changed: row.date_status_changed,
+  dateStatusChanged: row.date_status_changed,
   queryReason: row.query_reason, 
   dateQueried: row.date_queried,
   dateEmailed: row.date_emailed,
@@ -234,7 +234,6 @@ export const dataService = {
     throw new Error("Failed to bulk update: Database schema incompatible.");
   },
 
-  // Fix: Completed the truncated deleteManuscript method and fixed the 'isSup' typo
   async deleteManuscript(id: string) {
     if (!isSupabaseConfigured) {
       const current = await this.getManuscripts();
@@ -255,7 +254,6 @@ export const dataService = {
     if (error) throw new Error(error.message);
   },
 
-  // Fix: Added missing getUserSettings method to satisfy App.tsx requirements
   async getUserSettings() {
     if (!isSupabaseConfigured) {
       const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
@@ -283,7 +281,6 @@ export const dataService = {
     };
   },
 
-  // Fix: Added missing updateTarget method to satisfy App.tsx requirements
   async updateTarget(target: number) {
     if (!isSupabaseConfigured) {
       const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
@@ -301,7 +298,6 @@ export const dataService = {
     if (error) throw new Error(error.message);
   },
 
-  // Fix: Added missing updateSchedule method to satisfy App.tsx requirements
   async updateSchedule(schedule: UserSchedule) {
     if (!isSupabaseConfigured) {
       const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };

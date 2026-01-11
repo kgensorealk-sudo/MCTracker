@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, Mail, Send, CheckCircle, Clock, AlertCircle, Info, ListChecks } from 'lucide-react';
+import { X, Mail, Send, CheckCircle, Clock, ListChecks } from 'lucide-react';
 
 interface DailyReportModalProps {
   manuscripts: Manuscript[];
@@ -96,8 +96,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ manuscripts, onClos
 
     const mailtoUrl = `mailto:${to}?cc=${cc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
-    // FIX: Use window.location.href instead of window.open to trigger the mail app
-    // This prevents the empty "untitled" tab from appearing.
+    // Trigger the mail app
     window.location.href = mailtoUrl;
     
     // Mark as emailed in DB

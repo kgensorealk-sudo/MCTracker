@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send } from 'lucide-react';
+import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck } from 'lucide-react';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -9,11 +9,11 @@ interface ManuscriptListProps {
   onUpdate: (id: string, updates: Partial<Manuscript>) => void;
   onBulkUpdate: (ids: string[], updates: Partial<Manuscript>) => void;
   onBulkReview?: (ids: string[]) => void; 
-  activeFilter: Status | 'ALL' | 'PENDING_GROUP';
+  activeFilter: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER';
 }
 
 const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkReview, activeFilter }) => {
-  const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP'>(activeFilter);
+  const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER'>(activeFilter);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDateFilters, setShowDateFilters] = useState(false);
@@ -34,11 +34,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   }, [activeFilter]);
 
   const pendingCount = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length;
+  const handoverCount = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.PENDING_JM).length;
+  
   const counts = {
     ALL: manuscripts.length,
     UNTOUCHED: manuscripts.filter(m => m.status === Status.UNTOUCHED).length,
     PENDING_GROUP: pendingCount,
     WORKED: manuscripts.filter(m => m.status === Status.WORKED).length,
+    HANDOVER: handoverCount
   };
 
   const filtered = manuscripts.filter(m => {
@@ -46,6 +49,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     if (filterStatus === 'ALL') matchesStatus = true;
     else if (filterStatus === 'PENDING_GROUP') {
       matchesStatus = [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
+    } else if (filterStatus === 'HANDOVER') {
+      matchesStatus = m.status === Status.WORKED || m.status === Status.PENDING_JM;
     } else {
       matchesStatus = m.status === filterStatus;
     }
@@ -141,7 +146,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     onUpdate(m.id, updates);
   };
 
-  // --- SMART EMAIL LOGIC ---
   const handleSendEmail = (m: Manuscript) => {
     let recipient = '';
     let subject = '';
@@ -276,7 +280,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in-up">
-      {/* Bulk Action Bar - Refined Style */}
+      {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-6 py-4 shadow-2xl z-50 flex items-center gap-5 animate-fade-in-up border border-white/10 ring-1 ring-black/20">
            <span className="font-bold text-sm whitespace-nowrap px-3 bg-white/10 rounded-lg py-1.5">{selectedIds.size} selected</span>
@@ -319,8 +323,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           </div>
           
           <div className="flex gap-2 w-full xl:w-auto overflow-x-auto items-center pb-1 xl:pb-0 hide-scrollbar">
-            {(['ALL', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
-              const statusKey = key === 'ALL' ? 'ALL' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
+            {(['ALL', 'HANDOVER', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
+              const statusKey = key === 'ALL' ? 'ALL' : key === 'HANDOVER' ? 'HANDOVER' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
               return (
                 <button
                   key={key}
@@ -332,7 +336,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   }`}
                 >
                   <span>
-                    {key === 'ALL' ? 'All Files' : key === 'PENDING_GROUP' ? 'Pending / Queries' : key.charAt(0) + key.slice(1).toLowerCase()}
+                    {key === 'ALL' ? 'All' : key === 'HANDOVER' ? 'Handover List' : key === 'PENDING_GROUP' ? 'Pending' : key.charAt(0) + key.slice(1).toLowerCase()}
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${
                      filterStatus === statusKey ? 'bg-slate-600 text-slate-100' : 'bg-slate-100 text-slate-500'
@@ -382,6 +386,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       </div>
 
       <div className="overflow-x-auto min-h-[400px]">
+        {filterStatus === 'HANDOVER' && (
+          <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex items-center gap-3">
+             <FileCheck className="w-5 h-5 text-indigo-600" />
+             <p className="text-sm text-indigo-800 font-medium">
+               This view combines <span className="font-bold">Worked (Ready)</span> and <span className="font-bold text-rose-700">JM Queries (Pending)</span> files for your handover summary.
+             </p>
+          </div>
+        )}
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
