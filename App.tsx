@@ -7,10 +7,11 @@ import BulkImportModal from './components/BulkImportModal';
 import GamificationHub from './components/AchievementsModal'; 
 import DeveloperGuideModal from './components/DeveloperGuideModal';
 import HistoryReport from './components/HistoryReport';
+import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History, WifiOff } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, Upload, LogOut, Loader2, Database, Trophy, RefreshCw, History, WifiOff, Mail } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isGamificationOpen, setIsGamificationOpen] = useState(false);
   const [isDevOpen, setIsDevOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Bulk Review Queue State
@@ -66,7 +68,6 @@ const App: React.FC = () => {
       setLoading(false);
     }).catch(err => {
       console.error("Supabase auth error:", err);
-      // In case of network error, we could fall back to offline, but for now just stop loading
       setLoading(false);
     });
 
@@ -101,7 +102,6 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error loading data:", error);
-      // Ensure we don't crash on error
     } finally {
       setDataLoading(false);
     }
@@ -118,14 +118,11 @@ const App: React.FC = () => {
         setManuscripts(prev => [created, ...prev]);
       }
       
-      // Bulk Review Logic: Move to next item or close
       if (isBulkReview && bulkQueue.length > 0) {
         const nextId = bulkQueue[0];
         setBulkQueue(prev => prev.slice(1));
         setEditingId(nextId);
-        // Do not close form, ManuscriptForm will update via useEffect on initialData change
       } else {
-        // Queue finished or normal save
         setIsFormOpen(false);
         setEditingId(null);
         setIsBulkReview(false);
@@ -140,20 +137,16 @@ const App: React.FC = () => {
   };
 
   const handleQuickUpdate = async (id: string, updates: Partial<Manuscript>) => {
-    // Optimistic Update
     setManuscripts(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-
     const original = manuscripts.find(m => m.id === id);
     if (!original) return;
 
-    // Prepare full object for DB
     const updatedManuscript = { 
       ...original, 
       ...updates, 
       dateUpdated: new Date().toISOString() 
     };
 
-    // If status changed, update status date
     if (updates.status && updates.status !== original.status) {
       updatedManuscript.dateStatusChanged = new Date().toISOString();
       if (updatedManuscript.status === Status.WORKED && !updatedManuscript.completedDate) {
@@ -196,14 +189,10 @@ const App: React.FC = () => {
     }
   };
 
-  // Start the interactive review queue
   const handleBulkReview = (ids: string[]) => {
     if (ids.length === 0) return;
-    
     setIsBulkReview(true);
-    // Queue is everything AFTER the first one
     setBulkQueue(ids.slice(1));
-    // Immediately open the first one
     setEditingId(ids[0]);
     setIsFormOpen(true);
   };
@@ -236,8 +225,7 @@ const App: React.FC = () => {
       setView('list'); 
     } catch (error: any) {
       console.error("Bulk import failed:", error);
-      const errMsg = error.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
-      alert(`Some items failed to import: ${errMsg}`);
+      alert(`Some items failed to import: ${error.message || 'Error'}`);
       loadData();
     } finally {
       setDataLoading(false);
@@ -259,7 +247,16 @@ const App: React.FC = () => {
     });
   };
 
-  // UI Handlers
+  const handleMarkReported = async (ids: string[]) => {
+    const now = new Date().toISOString();
+    setManuscripts(prev => prev.map(m => ids.includes(m.id) ? { ...m, dateEmailed: now } : m));
+    try {
+      await dataService.updateManuscripts(ids, { dateEmailed: now });
+    } catch (error: any) {
+      console.error("Failed to mark reported: " + (error.message || "Unknown persistence error"));
+    }
+  };
+
   const handleEdit = (m: Manuscript) => {
     setEditingId(m.id);
     setIsFormOpen(true);
@@ -288,18 +285,15 @@ const App: React.FC = () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     } else {
-      // Just reload for local mode to reset
       window.location.reload();
     }
     setManuscripts([]);
   };
 
-  // Construct data for the form.
   const getEditingData = () => {
     if (!editingId) return undefined;
     const m = manuscripts.find(x => x.id === editingId);
     if (!m) return undefined;
-    
     if (isBulkReview) {
        return {
          ...m,
@@ -328,10 +322,8 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative">
-      {/* Decorative background blob */}
       <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 to-transparent -z-10 pointer-events-none"></div>
 
-      {/* Header */}
       <header className="glass border-b border-slate-200/60 sticky top-0 z-30 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -341,7 +333,7 @@ const App: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
             {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
             {!isSupabaseConfigured && (
-              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2" title="Data is saved to your browser (LocalStorage)">
+              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2">
                  <WifiOff className="w-3 h-3" /> Offline Mode
               </div>
             )}
@@ -381,11 +373,12 @@ const App: React.FC = () => {
 
             <div className="flex gap-2">
                <button
-                onClick={() => loadData()}
-                className="bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-                title="Sync / Refresh Data"
+                onClick={() => setIsReportOpen(true)}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
+                title="Email Daily Report"
               >
-                <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin' : ''}`} />
+                <Mail className="w-4 h-4" />
+                <span className="hidden xl:inline">Daily Report</span>
               </button>
               <button
                 onClick={() => setIsDevOpen(true)}
@@ -393,32 +386,22 @@ const App: React.FC = () => {
                 title="Developer Settings"
               >
                 <Database className="w-4 h-4" />
-                <span className="hidden lg:inline">Dev</span>
               </button>
               <button
                 onClick={() => setIsGamificationOpen(true)}
-                className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-amber-100 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
-                title="Achievements"
+                className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
               >
                 <Trophy className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setIsImportOpen(true)}
-                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-                title="Import"
-              >
-                <Upload className="w-4 h-4" />
-              </button>
-              <button
                 onClick={() => { setEditingId(null); setIsFormOpen(true); }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
               >
                 <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Log Work</span>
               </button>
               <button
                 onClick={handleSignOut}
                 className="bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow"
-                title={isSupabaseConfigured ? "Sign Out" : "Reset Demo"}
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -427,7 +410,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content with View Transitions */}
       <main className={`flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'list' ? 'max-w-[95%]' : 'max-w-7xl'}`}>
         <div key={view} className="animate-page-enter">
           {view === 'dashboard' ? (
@@ -447,7 +429,7 @@ const App: React.FC = () => {
               onDelete={handleDelete}
               onUpdate={handleQuickUpdate}
               onBulkUpdate={handleBulkUpdate}
-              onBulkReview={handleBulkReview} // Passed new handler
+              onBulkReview={handleBulkReview}
               activeFilter={listFilter}
             />
           ) : (
@@ -459,10 +441,9 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Modals */}
       {isFormOpen && (
         <ManuscriptForm 
-          initialData={getEditingData()} // Uses pre-filled logic for bulk review
+          initialData={getEditingData()}
           onSave={handleSave}
           onCancel={handleFormCancel}
           isQueueMode={isBulkReview}
@@ -491,6 +472,14 @@ const App: React.FC = () => {
       {isDevOpen && (
         <DeveloperGuideModal
           onClose={() => setIsDevOpen(false)}
+        />
+      )}
+
+      {isReportOpen && (
+        <DailyReportModal
+          manuscripts={manuscripts}
+          onClose={() => setIsReportOpen(false)}
+          onMarkReported={handleMarkReported}
         />
       )}
     </div>

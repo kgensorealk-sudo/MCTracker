@@ -25,6 +25,7 @@ export interface Manuscript {
   dateStatusChanged?: string; // ISO string - New field for tracking exact completion/status change time
   queryReason?: string; // Reason for the query (e.g. Figure Replacement, Missing Info)
   dateQueried?: string; // ISO string - Persists the date a query was raised even if status changes later
+  dateEmailed?: string; // ISO string - Track when an email was last triggered
   notes: Note[];
   priority: 'Normal' | 'High' | 'Urgent';
 }
@@ -38,8 +39,6 @@ export interface DashboardStats {
 
 export interface UserSchedule {
   daysOff: string[]; // ISO date strings (YYYY-MM-DD) of planned days off
-  // Array of 7 numbers (0 to 1) representing capacity for Sun(0) to Sat(6)
-  // e.g., [0, 1, 1, 1, 1, 1, 0.5] means Sun off, Sat half day
   weeklyWeights: number[]; 
 }
 
@@ -49,10 +48,10 @@ export interface Achievement {
   id: string;
   title: string;
   description: string;
-  icon: string; // Lucide icon name mapping
+  icon: string; 
   condition: (manuscripts: Manuscript[], target: number) => boolean;
-  progress: (manuscripts: Manuscript[], target: number) => number; // 0 to 100
-  maxProgressValue: number; // The generic number needed (e.g., 100 files)
+  progress: (manuscripts: Manuscript[], target: number) => number; 
+  maxProgressValue: number; 
   currentProgressValue: (manuscripts: Manuscript[], target: number) => number;
   tier: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM';
   xpReward: number;

@@ -141,6 +141,43 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     onUpdate(m.id, updates);
   };
 
+  // --- SMART EMAIL LOGIC ---
+  const handleSendEmail = (m: Manuscript) => {
+    let recipient = '';
+    let subject = '';
+    let body = '';
+
+    const lastNote = m.notes[0]?.content || "N/A";
+
+    switch(m.status) {
+      case Status.PENDING_JM:
+        recipient = 'JM_CONTACT@publisher.com';
+        subject = `Query: ${m.manuscriptId} - ${m.journalCode}`;
+        body = `Hi JM Team,\n\nRegarding manuscript ${m.manuscriptId} (${m.journalCode}), I have a query:\n\n${lastNote}\n\nPlease let me know how to proceed.\n\nRegards,\nAnalyst`;
+        break;
+      case Status.PENDING_TL:
+        recipient = 'TL_CONTACT@publisher.com';
+        subject = `TL Assistance Required: ${m.manuscriptId}`;
+        body = `Hi Team,\n\nI need TL assistance for ${m.manuscriptId}.\n\nContext:\n${lastNote}\n\nThanks!`;
+        break;
+      case Status.PENDING_CED:
+        recipient = 'CED_CONTACT@publisher.com';
+        subject = `Urgent Escalation: ${m.manuscriptId}`;
+        body = `Hi CED,\n\nEscalating manuscript ${m.manuscriptId} for status review.\n\nPriority: ${m.priority}\nLast Note: ${lastNote}\n\nBest,`;
+        break;
+      default:
+        recipient = '';
+        subject = `Follow-up: ${m.manuscriptId}`;
+        body = `Hi,\n\nChecking in on the status of ${m.manuscriptId}.\n\nThanks.`;
+    }
+
+    const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoUrl, '_blank');
+    
+    // Update the last emailed timestamp
+    onUpdate(m.id, { dateEmailed: new Date().toISOString() });
+  };
+
   const handleCloseQueryModal = () => {
     setIsQueryModalClosing(true);
     setTimeout(() => {
@@ -387,6 +424,11 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(m.status)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>{displayDate}</span>
+                    {m.dateEmailed && (
+                      <div className="text-[9px] text-indigo-500 font-bold flex items-center gap-1 mt-0.5">
+                        <Mail className="w-2.5 h-2.5" /> Emailed
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-0.5">
@@ -436,6 +478,9 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                     <div className="flex justify-end items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       {m.status !== Status.WORKED && (
                         <>
+                          <button onClick={() => handleSendEmail(m)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-all shadow-sm hover:shadow" title="Draft Email (mailto)">
+                            <Send className="w-4 h-4" />
+                          </button>
                           {m.status !== Status.PENDING_JM && (
                             <button onClick={() => handleQuickAction(m, 'QUERY_JM')} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-all shadow-sm hover:shadow" title="Query to JM">
                               <AlertCircle className="w-4 h-4" />

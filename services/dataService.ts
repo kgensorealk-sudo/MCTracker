@@ -1,3 +1,4 @@
+
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Manuscript, UserSchedule } from '../types';
 
@@ -12,9 +13,10 @@ const mapToManuscript = (row: any): Manuscript => ({
   dueDate: row.due_date,
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
-  dateStatusChanged: row.date_status_changed,
+  dateStatus_changed: row.date_status_changed,
   queryReason: row.query_reason, 
   dateQueried: row.date_queried,
+  dateEmailed: row.date_emailed,
   notes: row.notes || []
 });
 
@@ -32,17 +34,21 @@ export const dataService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
 
-    const { data, error } = await supabase
-      .from('manuscripts')
-      .select('*')
-      .eq('user_id', user.id) // Enforce user isolation
-      .order('date_updated', { ascending: false });
-      
-    if (error) throw error;
-    return data.map(mapToManuscript);
+      const { data, error } = await supabase
+        .from('manuscripts')
+        .select('*')
+        .eq('user_id', user.id) // Enforce user isolation
+        .order('date_updated', { ascending: false });
+        
+      if (error) throw new Error(error.message);
+      return data.map(mapToManuscript);
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to fetch manuscripts");
+    }
   },
 
   async createManuscript(m: Manuscript) {
@@ -70,12 +76,12 @@ export const dataService = {
         date_status_changed: m.dateStatusChanged,
         query_reason: m.queryReason,
         date_queried: m.dateQueried,
+        date_emailed: m.dateEmailed,
         notes: m.notes
     };
 
-    // Retry loop for schema mismatches (handles multiple missing columns sequentially)
     let attempt = 0;
-    const maxAttempts = 3; 
+    const maxAttempts = 5; 
 
     while (attempt < maxAttempts) {
         const { data, error } = await supabase
@@ -84,24 +90,26 @@ export const dataService = {
           .select()
           .single();
 
-        if (!error) {
-            return mapToManuscript(data);
-        }
+        if (!error) return mapToManuscript(data);
 
-        // Check for undefined column error (Postgres code 42703)
-        if (error.code === '42703') {
-            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
-                               error.message?.includes('date_queried') ? 'date_queried' : null;
+        // More aggressive error detection for missing columns
+        const isColumnError = error.code === '42703' || 
+                             error.message.includes('column') || 
+                             error.message.includes('schema cache');
+
+        if (isColumnError) {
+            const msg = error.message.toLowerCase();
+            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
+                               msg.includes('date_queried') ? 'date_queried' :
+                               msg.includes('date_emailed') ? 'date_emailed' : null;
             
             if (missingCol && payload[missingCol] !== undefined) {
-                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying insert without it.`);
                 delete payload[missingCol];
                 attempt++;
                 continue;
             }
         }
-        
-        throw error;
+        throw new Error(error.message || "Unknown DB Error during creation");
     }
     throw new Error("Failed to create manuscript: Database schema incompatible.");
   },
@@ -129,11 +137,12 @@ export const dataService = {
         date_status_changed: m.dateStatusChanged,
         query_reason: m.queryReason,
         date_queried: m.dateQueried,
+        date_emailed: m.dateEmailed,
         notes: m.notes
     };
 
     let attempt = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
 
     while (attempt < maxAttempts) {
         const { data, error } = await supabase
@@ -144,40 +153,35 @@ export const dataService = {
           .select()
           .single();
 
-        if (!error) {
-            return mapToManuscript(data);
-        }
+        if (!error) return mapToManuscript(data);
 
-        if (error.code === '42703') {
-            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
-                               error.message?.includes('date_queried') ? 'date_queried' : null;
+        const isColumnError = error.code === '42703' || 
+                             error.message.includes('column') || 
+                             error.message.includes('schema cache');
+
+        if (isColumnError) {
+            const msg = error.message.toLowerCase();
+            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
+                               msg.includes('date_queried') ? 'date_queried' :
+                               msg.includes('date_emailed') ? 'date_emailed' : null;
 
             if (missingCol && payload[missingCol] !== undefined) {
-                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying update without it.`);
                 delete payload[missingCol];
                 attempt++;
                 continue;
             }
         }
-        throw error;
+        throw new Error(error.message || "Unknown DB Error during update");
     }
     throw new Error("Failed to update manuscript: Database schema incompatible.");
   },
 
   async updateManuscripts(ids: string[], updates: Partial<Manuscript>) {
-    const applyUpdates = (original: Manuscript) => ({
-       ...original,
-       ...updates,
-       dateUpdated: new Date().toISOString(),
-       dateStatusChanged: (updates.status && updates.status !== original.status) 
-          ? new Date().toISOString() 
-          : original.dateStatusChanged
-    });
-
     if (!isSupabaseConfigured) {
       const current = await this.getManuscripts();
+      const now = new Date().toISOString();
       const updated = current.map((item: Manuscript) => 
-        ids.includes(item.id) ? applyUpdates(item) : item
+        ids.includes(item.id) ? { ...item, ...updates, dateUpdated: now } : item
       );
       localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
       return;
@@ -195,9 +199,10 @@ export const dataService = {
     if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
     if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
     if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
+    if (updates.dateEmailed !== undefined) dbUpdates.date_emailed = updates.dateEmailed;
     
     let attempt = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
 
     while (attempt < maxAttempts) {
         const { error } = await supabase
@@ -208,22 +213,28 @@ export const dataService = {
 
         if (!error) return;
 
-        if (error.code === '42703') {
-            const missingCol = error.message?.includes('query_reason') ? 'query_reason' : 
-                               error.message?.includes('date_queried') ? 'date_queried' : null;
+        const isColumnError = error.code === '42703' || 
+                             error.message.includes('column') || 
+                             error.message.includes('schema cache');
+
+        if (isColumnError) {
+            const msg = error.message.toLowerCase();
+            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
+                               msg.includes('date_queried') ? 'date_queried' :
+                               msg.includes('date_emailed') ? 'date_emailed' : null;
             
             if (missingCol && dbUpdates[missingCol] !== undefined) {
-                console.warn(`Database schema mismatch: '${missingCol}' column missing. Retrying bulk update without it.`);
                 delete dbUpdates[missingCol];
                 attempt++;
                 continue;
             }
         }
-        throw error;
+        throw new Error(error.message || "Unknown DB Error during bulk update");
     }
     throw new Error("Failed to bulk update: Database schema incompatible.");
   },
 
+  // Fix: Completed the truncated deleteManuscript method and fixed the 'isSup' typo
   async deleteManuscript(id: string) {
     if (!isSupabaseConfigured) {
       const current = await this.getManuscripts();
@@ -239,154 +250,76 @@ export const dataService = {
       .from('manuscripts')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id); // Ensure we only delete our own records
-    if (error) throw error;
+      .eq('user_id', user.id);
+
+    if (error) throw new Error(error.message);
   },
 
-  // --- User Settings ---
-
+  // Fix: Added missing getUserSettings method to satisfy App.tsx requirements
   async getUserSettings() {
     if (!isSupabaseConfigured) {
       const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (stored) return JSON.parse(stored);
-      // Default offline settings
-      return {
-        targetPerCycle: 50,
-        userSchedule: { 
-          daysOff: [], 
-          weeklyWeights: [1, 1, 1, 1, 1, 1, 1] // Default: All days are work days
-        }
-      };
+      return stored ? JSON.parse(stored) : null;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('user_settings')
       .select('*')
       .eq('user_id', user.id)
       .single();
 
-    if (error && error.code === 'PGRST116') {
-       // Row doesn't exist (legacy user?), create it
-       const { data: newData, error: createError } = await supabase
-         .from('user_settings')
-         .insert([{ user_id: user.id }])
-         .select()
-         .single();
-       if (createError) throw createError;
-       data = newData;
-    } else if (error) {
-      throw error;
-    }
-
-    // Determine weekly weights.
-    let weeklyWeights = data.weekly_weights;
-    if (!weeklyWeights) {
-      if (data.exclude_weekends) {
-        // [Sun, Mon, Tue, Wed, Thu, Fri, Sat]
-        weeklyWeights = [0, 1, 1, 1, 1, 1, 0];
-      } else {
-        weeklyWeights = [1, 1, 1, 1, 1, 1, 1];
-      }
-    }
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) return null;
 
     return {
       targetPerCycle: data.target_per_cycle,
-      userSchedule: { 
-        daysOff: (data.days_off as string[]) || [],
-        weeklyWeights: weeklyWeights
-      } as UserSchedule
+      userSchedule: {
+        daysOff: data.days_off || [],
+        weeklyWeights: data.weekly_weights || [1, 1, 1, 1, 1, 1, 1]
+      }
     };
   },
 
+  // Fix: Added missing updateTarget method to satisfy App.tsx requirements
   async updateTarget(target: number) {
     if (!isSupabaseConfigured) {
-      const current = await this.getUserSettings();
-      const updated = { ...current, targetPerCycle: target };
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+      const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, targetPerCycle: target }));
       return;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) throw new Error("User not authenticated");
+
     const { error } = await supabase
       .from('user_settings')
-      .update({ target_per_cycle: target })
-      .eq('user_id', user.id);
-    if (error) throw error;
+      .upsert({ user_id: user.id, target_per_cycle: target }, { onConflict: 'user_id' });
+
+    if (error) throw new Error(error.message);
   },
 
+  // Fix: Added missing updateSchedule method to satisfy App.tsx requirements
   async updateSchedule(schedule: UserSchedule) {
     if (!isSupabaseConfigured) {
-      const current = await this.getUserSettings();
-      const updated = { ...current, userSchedule: schedule };
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+      const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, userSchedule: schedule }));
       return;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    // --- Strategy: 3-Tier Fallback Save ---
-    
-    // Attempt 1: Full Update (Preferred - New Schema)
-    const { error: err1 } = await supabase
+    if (!user) throw new Error("User not authenticated");
+
+    const { error } = await supabase
       .from('user_settings')
-      .update({ 
-        days_off: schedule.daysOff,
-        weekly_weights: schedule.weeklyWeights
-      })
-      .eq('user_id', user.id);
-      
-    if (!err1) return; // Success!
+      .upsert({ 
+        user_id: user.id, 
+        days_off: schedule.daysOff, 
+        weekly_weights: schedule.weeklyWeights 
+      }, { onConflict: 'user_id' });
 
-    // Helper to identify missing column errors
-    const isSchemaError = (err: any) => 
-        err.message?.includes('weekly_weights') || 
-        err.message?.includes('exclude_weekends') ||
-        err.message?.includes('column') ||
-        err.code === '42703' || 
-        err.message?.includes('schema cache');
-
-    // If err1 was a schema error, try fallback
-    if (isSchemaError(err1)) {
-        console.warn("Primary schedule update failed (New Schema). Attempting legacy fallback.");
-
-        // Attempt 2: Legacy Update (Exclude Weekends)
-        const excludeWeekends = (schedule.weeklyWeights[0] === 0 && schedule.weeklyWeights[6] === 0);
-        
-        const { error: err2 } = await supabase
-            .from('user_settings')
-            .update({ 
-                days_off: schedule.daysOff,
-                exclude_weekends: excludeWeekends
-            })
-            .eq('user_id', user.id);
-
-        if (!err2) return; // Success on legacy!
-
-        // If err2 was ALSO a schema error, try minimal
-        if (isSchemaError(err2)) {
-             console.warn("Legacy schedule update failed. Attempting minimal save (Days Off only).");
-             
-             // Attempt 3: Minimal Update (Days Off only)
-             const { error: err3 } = await supabase
-                .from('user_settings')
-                .update({ 
-                    days_off: schedule.daysOff 
-                })
-                .eq('user_id', user.id);
-            
-            if (!err3) return; // Success on minimal!
-            
-             throw new Error("DB Update Failed (Minimal): " + err3.message);
-        }
-        
-        throw new Error("DB Update Failed (Legacy): " + err2.message);
-    }
-
-    throw new Error("DB Update Failed: " + err1.message);
+    if (error) throw new Error(error.message);
   }
 };

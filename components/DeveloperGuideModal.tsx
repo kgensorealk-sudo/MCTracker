@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS manuscripts (
 -- MIGRATION: Safely add new columns if they are missing
 ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS query_reason TEXT;
 ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS date_queried TIMESTAMPTZ;
+ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS date_emailed TIMESTAMPTZ;
 
 -- Security Policies
 ALTER TABLE manuscripts ENABLE ROW LEVEL SECURITY;
