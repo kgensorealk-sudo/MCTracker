@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
 import { X, ClipboardList, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, DollarSign, RefreshCcw, HandMetal } from 'lucide-react';
@@ -104,21 +103,16 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   };
 
   const handleFinishReconciliation = () => {
-    // Collect all matched items that are currently just "WORKED"
     const idsToMarkBilled = billingAnalysis.matched
       .filter(m => m.status === Status.WORKED)
       .map(m => m.id);
 
     if (idsToMarkBilled.length > 0) {
-      // Use the cycle's start date as the billing reference for reporting
       const targetBilledDate = selectedCycleData?.info.startDate.toISOString() || new Date().toISOString();
-      
       onBulkUpdate?.(idsToMarkBilled, { 
         status: Status.BILLED, 
         billedDate: targetBilledDate 
       });
-      
-      console.log(`Auto-finalized reconciliation: ${idsToMarkBilled.length} items marked as Billed.`);
     }
 
     handleClose();
@@ -126,9 +120,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
 
   const handleClaimExtra = (mId: string) => {
     if (!selectedCycleData) return;
-    
     const targetDate = selectedCycleData.info.startDate.toISOString();
-    
     if (window.confirm(`Claim ${mId} for the ${selectedCycleData.info.label} cycle? This will move its financial credit to this cycle while keeping its work history.`)) {
         const item = manuscripts.find(m => m.id === mId);
         if (item) {
@@ -194,12 +186,12 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
 
                   <div className="pt-4 border-t border-slate-100 space-y-4">
                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                       <Calculator className="w-3.5 h-3.5" /> Payout Settings (This Cycle)
+                       <Calculator className="w-3.5 h-3.5" /> Rate Configuration (This Cycle)
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                             <DollarSign className="w-2.5 h-2.5" /> USD Rate
+                             <DollarSign className="w-2.5 h-2.5" /> Rate/Item (USD)
                           </label>
                           <input 
                              type="number" 
@@ -211,7 +203,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                        </div>
                        <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                             <Coins className="w-2.5 h-2.5" /> PHP Rate
+                             <Coins className="w-2.5 h-2.5" /> Rate/Item (PHP)
                           </label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">₱</span>
@@ -255,13 +247,13 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                               <TrendingUp className="w-8 h-8 text-indigo-200" />
                            </div>
                            <div className="flex-1">
-                              <p className="text-xs font-bold text-indigo-200 uppercase tracking-widest mb-1 opacity-80">Cycle Salary Projection</p>
+                              <p className="text-xs font-bold text-indigo-200 uppercase tracking-widest mb-1 opacity-80">Confirmed Salary Projection</p>
                               <div className="flex items-baseline gap-3">
                                  <h3 className="text-4xl font-black tracking-tighter">₱{salaryProjection.totalPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
                               </div>
                               <div className="mt-3 flex items-center gap-4 text-[11px] font-bold">
                                  <span className="px-2 py-1 bg-black/30 rounded-lg backdrop-blur-sm border border-white/10 flex items-center gap-1.5 text-emerald-400">
-                                    <FileCheck className="w-3 h-3" /> {salaryProjection.billedCount} Billed
+                                    <FileCheck className="w-3 h-3" /> {salaryProjection.billedCount} Confirmed Billed
                                  </span>
                                  <span className="px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm border border-white/5 text-indigo-100">
                                     Gross: ${salaryProjection.totalUsd.toFixed(2)} USD
@@ -276,7 +268,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                               <p className="text-xl font-bold text-indigo-600">{billingAnalysis.foundCount}</p>
                            </div>
                            <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex-1 flex flex-col justify-center bg-rose-50/20">
-                              <p className="text-[10px] font-bold text-rose-400 uppercase mb-0.5">Status Mismatch</p>
+                              <p className="text-[10px] font-bold text-rose-400 uppercase mb-0.5">Needs Billing Status</p>
                               <p className="text-xl font-bold text-rose-600">{billingAnalysis.statusMismatches}</p>
                            </div>
                         </div>
@@ -298,7 +290,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                          <span>Successfully matched {billingAnalysis.foundCount} items.</span>
                                          {billingAnalysis.statusMismatches > 0 && (
                                             <span className="text-rose-600 font-bold ml-1 flex items-center gap-1">
-                                               <AlertTriangle className="w-3.5 h-3.5" /> {billingAnalysis.statusMismatches} need status sync
+                                               <AlertTriangle className="w-3.5 h-3.5" /> {billingAnalysis.statusMismatches} need updating to 'Billed' status
                                             </span>
                                          )}
                                       </div>
@@ -405,7 +397,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
               onClick={handleFinishReconciliation} 
               className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
            >
-              Finish Reconciliation <ArrowRight className="w-4 h-4" />
+              Update Billed Status <ArrowRight className="w-4 h-4" />
            </button>
         </div>
       </div>

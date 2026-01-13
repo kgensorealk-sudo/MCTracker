@@ -12,7 +12,7 @@ import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail, Upload } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
@@ -176,15 +176,12 @@ const App: React.FC = () => {
     };
 
     if (updates.status && updates.status !== original.status) {
-      // Logic fix: If moving from WORKED to BILLED, do not update dateStatusChanged.
-      // This preserves the work date so the file stays in its original cycle.
       const isReconciling = updates.status === Status.BILLED && original.status === Status.WORKED;
       
       if (!isReconciling) {
         updatedManuscript.dateStatusChanged = now;
       }
 
-      // Only set completedDate if it doesn't exist. Never overwrite.
       if ((updatedManuscript.status === Status.WORKED || updatedManuscript.status === Status.BILLED) && !original.completedDate) {
         updatedManuscript.completedDate = now;
       }
@@ -225,7 +222,6 @@ const App: React.FC = () => {
           itemUpdates.dateStatusChanged = now;
         }
 
-        // Maintain completedDate integrity
         if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
           itemUpdates.completedDate = now;
         }
@@ -470,6 +466,13 @@ const App: React.FC = () => {
                 className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
               >
                 <Trophy className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
+                title="Import from Spreadsheet"
+              >
+                <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
               </button>
               <button
                 onClick={() => { setEditingId(null); setIsFormOpen(true); }}

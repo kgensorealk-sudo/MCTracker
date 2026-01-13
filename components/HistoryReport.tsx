@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
-import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays } from 'lucide-react';
+import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays, Calendar } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
@@ -29,7 +29,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
   const [showRateSettings, setShowRateSettings] = useState(false);
   
-  // Per-cycle rates state
   const [cycleRates, setCycleRates] = useState<Record<string, RateProfile>>(() => {
     try {
       const stored = localStorage.getItem('mc_tracker_cycle_rates');
@@ -119,7 +118,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       }
     });
 
-    const chartData = Object.entries(months)
+    const monthlyChartData = Object.entries(months)
       .map(([key, data]) => ({
         key,
         label: formatLabel(key),
@@ -133,24 +132,25 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
     const cycleChartData = [...sortedCycles].reverse().map(c => {
       const rates = cycleRates[c.info.id] || DEFAULT_RATES;
       const count = c.files.length;
+      const billedCount = c.files.filter(f => f.status === Status.BILLED).length;
       return {
         name: c.info.label.split(' (')[0],
         count,
-        earnings: count * rates.php,
-        usd: count * rates.usd,
+        billedCount,
+        earnings: billedCount * rates.php,
+        usd: billedCount * rates.usd,
         id: c.info.id
       };
     });
 
     return {
-      chartData,
+      monthlyChartData,
       cycleGroups,
       sortedCycles,
       cycleChartData
     };
   }, [manuscripts, cycleRates]);
 
-  // Safely initialize or reset selectedCycleId
   useEffect(() => {
     if (stats.sortedCycles.length > 0) {
       const exists = stats.sortedCycles.some(c => c.info.id === selectedCycleId);
@@ -172,9 +172,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
     const billedCount = files.filter(f => f.status === Status.BILLED).length;
     const workedCount = files.filter(f => f.status === Status.WORKED).length;
     
-    // Payout Date Logic:
-    // Dec 26 - Jan 10 (C2) -> Payout Jan 25
-    // Jan 11 - Jan 25 (C1) -> Payout Feb 10
     const endDate = cycle.info.endDate;
     let payoutDate: Date;
     if (selectedCycleId.endsWith('-C1')) {
@@ -183,8 +180,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       payoutDate = new Date(endDate.getFullYear(), endDate.getMonth(), 25);
     }
 
-    const totalPotentialPhp = (billedCount + workedCount) * rates.php;
-    const totalPotentialUsd = (billedCount + workedCount) * rates.usd;
     const billedPhp = billedCount * rates.php;
     const billedUsd = billedCount * rates.usd;
 
@@ -196,8 +191,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         pendingPhp: workedCount * rates.php,
         billedPhp,
         billedUsd,
-        totalPotentialPhp,
-        totalPotentialUsd,
         rates,
         payoutDateStr: payoutDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         cycleLabel: cycle.info.label
@@ -249,7 +242,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             </div>
             <div>
               <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <DollarSign className="w-3 h-3" /> Cycle Rate (USD)
+                <DollarSign className="w-3 h-3" /> Rate Per Item (USD)
               </label>
               <input 
                 type="number" step="0.01" 
@@ -260,7 +253,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             </div>
             <div>
               <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <Coins className="w-3 h-3" /> Cycle Rate (PHP)
+                <Coins className="w-3 h-3" /> Rate Per Item (PHP)
               </label>
               <input 
                 type="number" step="0.01" 
@@ -279,7 +272,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Confirmed Cycle Payout Card */}
         <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
              <Wallet className="w-24 h-24" />
@@ -335,6 +327,125 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
               </div>
            </div>
            <div className="text-xs text-slate-400 font-medium">Average files per work day in cycle</div>
+        </div>
+      </div>
+
+      {/* Main Analysis Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Payroll Cycle Volume - BAR CHART */}
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-8">
+                <div>
+                    <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2.5">
+                        <Wallet className="w-6 h-6 text-indigo-600" /> Payroll Cycle Volume
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Items grouped by payment periods (11-25 / 26-10)</p>
+                </div>
+                <div className="p-2.5 bg-indigo-50 rounded-2xl">
+                   <BarChart3 className="w-5 h-5 text-indigo-500" />
+                </div>
+            </div>
+            <div className="h-[300px] w-full">
+                {stats.cycleChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="cycleGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#4f46e5" stopOpacity={1} />
+                                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }} height={40} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                            <Tooltip 
+                                cursor={{ fill: '#f8fafc', radius: 6 }}
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 text-xs">
+                                                <p className="font-bold mb-2 text-indigo-300 flex items-center gap-1.5 uppercase tracking-widest text-[10px]">
+                                                   <CalendarDays className="w-3 h-3" /> {label}
+                                                </p>
+                                                <div className="space-y-1">
+                                                  <p className="text-base font-bold">Total: <span className="text-white">{payload[0].value} files</span></p>
+                                                  <p className="text-indigo-400 font-medium">{payload[0].payload.billedCount} Confirmed Billed</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={45} isAnimationActive={false}>
+                              {stats.cycleChartData.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
+                              ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
+                        <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Insufficient cycle history.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* Calendar Month Performance - AREA CHART */}
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-8">
+                <div>
+                    <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2.5">
+                        <Calendar className="w-6 h-6 text-slate-500" /> Calendar Month Output
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Items grouped by standard calendar month (1st - 31st)</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-2xl">
+                   <TrendingUp className="w-5 h-5 text-slate-400" />
+                </div>
+            </div>
+            <div className="h-[300px] w-full">
+                {stats.monthlyChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="monthGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#64748b" stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                            <Tooltip 
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xl text-xs">
+                                                <p className="font-black mb-2 text-slate-400 uppercase tracking-widest text-[10px]">{label} Overview</p>
+                                                <p className="text-xl font-black text-slate-800">{payload[0].value} <span className="text-[10px] text-slate-400 font-bold">FILES HANDLED</span></p>
+                                                <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-2 text-slate-500">
+                                                   <Clock className="w-3 h-3" />
+                                                   <span>Avg Speed: <b>{payload[0].payload.avgTat} days</b></span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Area type="monotone" dataKey="count" stroke="#64748b" strokeWidth={4} fillOpacity={1} fill="url(#monthGradient)" isAnimationActive={false} dot={{ r: 4, fill: '#fff', stroke: '#64748b', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#64748b' }} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
+                        <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Add completed files to see calendar trends.</p>
+                    </div>
+                )}
+            </div>
         </div>
       </div>
 
@@ -406,7 +517,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                      <th className="px-6 py-4">Verification</th>
                      <th className="px-6 py-4">Journal</th>
                      <th className="px-6 py-4">Completed</th>
-                     <th className="px-6 py-4">Est. Payout</th>
+                     <th className="px-6 py-4">Payout (Per Item)</th>
                      <th className="px-6 py-4">Action</th>
                   </tr>
                </thead>
@@ -470,66 +581,16 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
          </div>
       </div>
 
+      {/* Confirmation Area Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Earnings History (Area) */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-indigo-500" /> Cycle Volume
+                        <TrendingUp className="w-5 h-5 text-emerald-500" /> Confirmed Earnings History
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1">Number of files per cycle</p>
-                </div>
-            </div>
-            <div className="h-[280px] w-full">
-                {stats.cycleChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="cycleGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#4f46e5" stopOpacity={1} />
-                                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} height={40} angle={-5} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                            <Tooltip 
-                                cursor={{ fill: '#f8fafc' }}
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                        return (
-                                            <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs">
-                                                <p className="font-bold mb-1 opacity-70">{label}</p>
-                                                <p className="text-base">Files: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
-                            />
-                            <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={50} isAnimationActive={false}>
-                              {stats.cycleChartData.map((_, index) => (
-                                  <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
-                              ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                        <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
-                        <p className="text-sm font-medium">Insufficient cycle history.</p>
-                    </div>
-                )}
-            </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-emerald-500" /> Earnings History
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">Estimated PHP payout per cycle</p>
+                    <p className="text-xs text-slate-500 mt-1">PHP payout from BILLED items per cycle</p>
                 </div>
             </div>
             <div className="h-[280px] w-full">
@@ -552,6 +613,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                                             <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xl text-xs">
                                                 <p className="font-bold mb-2 text-slate-500 border-b border-slate-100 pb-1">{label}</p>
                                                 <p className="text-lg font-black text-emerald-600">₱{payload[0].value?.toLocaleString()}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">{payload[0].payload.billedCount} Billed Items</p>
                                             </div>
                                         );
                                     }
@@ -564,63 +626,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
                         <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
-                        <p className="text-sm font-medium">Add worked files to see earnings chart.</p>
+                        <p className="text-sm font-medium">Add billed files to see earnings history.</p>
                     </div>
                 )}
             </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
-           <div className="flex flex-col mb-6">
-              <div className="flex items-center justify-between">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-indigo-500" /> Monthly Volume
-                 </h3>
-                 <div className="px-2.5 py-1 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Output Metric
-                 </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per calendar month.</p>
-           </div>
-           <div className="h-[250px] w-full">
-              {stats.chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
-                      <Tooltip 
-                         cursor={{fill: '#f8fafc'}}
-                         content={({ active, payload, label }) => {
-                            if (active && payload && payload.length) {
-                               return (
-                                  <div className="bg-slate-900 text-white text-xs py-2 px-3 rounded-lg shadow-xl">
-                                     <p className="font-bold mb-1 opacity-70">{label}</p>
-                                     <p className="text-base">Completed: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
-                                  </div>
-                               );
-                            }
-                            return null;
-                         }}
-                      />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={50} isAnimationActive={false}>
-                         {stats.chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.count >= 30 ? '#6366f1' : '#cbd5e1'} />
-                         ))}
-                      </Bar>
-                   </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                   <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
-                   <p className="text-sm font-medium">No history data available yet.</p>
-                </div>
-              )}
-           </div>
-        </div>
-
+        {/* Speed Trend (Line) */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
@@ -633,10 +645,10 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
               </div>
               <p className="text-xs text-slate-500 mt-1">Average days taken to complete a file.</p>
            </div>
-           <div className="h-[250px] w-full">
-              {stats.chartData.length > 0 ? (
+           <div className="h-[280px] w-full">
+              {stats.monthlyChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                   <LineChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
