@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, Mail, Send, CheckCircle, Clock, ListChecks, Copy, Eye, Check, Table, ClipboardCheck, ArrowRight, ArrowLeft, User, Users, Tag } from 'lucide-react';
+import { X, Mail, CheckCircle, Clock, ListChecks, Copy, Check, Table, ClipboardCheck, ArrowRight, ArrowLeft, User, Users, Tag } from 'lucide-react';
 
 interface DailyReportModalProps {
   manuscripts: Manuscript[];
@@ -349,7 +349,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ manuscripts, onClos
                       : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'
                   }`}
                 >
-                  {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                  <CheckCircle className="w-5 h-5" />
                   {copied ? 'Body Copied!' : 'Copy Body Table'}
                 </button>
                 <button

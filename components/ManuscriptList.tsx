@@ -223,7 +223,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         .map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`)
         .join('; ');
       let submittedDate = '';
-      if (m.status === Status.WORKED) {
+      if (m.status === Status.WORKED || m.status === Status.BILLED) {
           const rawDate = m.completedDate || m.dateStatusChanged || m.dateUpdated;
           submittedDate = new Date(rawDate).toLocaleDateString();
       }
@@ -256,20 +256,51 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   };
 
   const getStatusBadge = (status: Status) => {
-    switch (status) {
-      case Status.WORKED:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle className="w-3.5 h-3.5" /> Worked</span>;
-      case Status.UNTOUCHED:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200"><Inbox className="w-3.5 h-3.5" /> Untouched</span>;
-      case Status.PENDING_JM:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100"><AlertCircle className="w-3.5 h-3.5" /> JM Query</span>;
-      case Status.PENDING_TL:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100"><AlertTriangle className="w-3.5 h-3.5" /> TL Query</span>;
-      case Status.PENDING_CED:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100"><Mail className="w-3.5 h-3.5" /> Email CED</span>;
-      default:
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800 border border-gray-200">Unknown</span>;
-    }
+    const config = {
+      [Status.WORKED]: { 
+        label: 'Worked', 
+        icon: <CheckCircle className="w-3.5 h-3.5" />, 
+        classes: 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 hover:shadow-emerald-100/30' 
+      },
+      [Status.BILLED]: { 
+        label: 'Billed', 
+        icon: <FileCheck className="w-3.5 h-3.5" />, 
+        classes: 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 hover:shadow-indigo-100/30' 
+      },
+      [Status.UNTOUCHED]: { 
+        label: 'Untouched', 
+        icon: <Inbox className="w-3.5 h-3.5" />, 
+        classes: 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:shadow-slate-100/30' 
+      },
+      [Status.PENDING_JM]: { 
+        label: 'JM Query', 
+        icon: <AlertCircle className="w-3.5 h-3.5" />, 
+        classes: 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100 hover:shadow-rose-100/30' 
+      },
+      [Status.PENDING_TL]: { 
+        label: 'TL Query', 
+        icon: <AlertTriangle className="w-3.5 h-3.5" />, 
+        classes: 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 hover:shadow-amber-100/30' 
+      },
+      [Status.PENDING_CED]: { 
+        label: 'Email CED', 
+        icon: <Mail className="w-3.5 h-3.5" />, 
+        classes: 'bg-violet-50 text-violet-700 border-violet-100 hover:bg-violet-100 hover:shadow-violet-100/30' 
+      },
+    };
+
+    const current = config[status] || { 
+      label: status, 
+      icon: <Clock className="w-3.5 h-3.5" />, 
+      classes: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200' 
+    };
+
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 whitespace-nowrap ${current.classes}`}>
+        {current.icon}
+        {current.label}
+      </span>
+    );
   };
 
   const isToday = (date: Date) => {
@@ -290,8 +321,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
              <ListChecks className="w-5 h-5" /> Review & Mark Worked
            </button>
            <div className="h-6 w-px bg-white/20"></div>
-           <button onClick={() => handleDirectBulkStatusChange(Status.PENDING_JM)} className="flex items-center gap-2 hover:text-rose-300 transition-colors text-sm font-semibold">
-             <AlertCircle className="w-5 h-5" /> JM Query
+           <button onClick={() => handleDirectBulkStatusChange(Status.BILLED)} className="flex items-center gap-2 hover:text-indigo-300 transition-colors text-sm font-semibold">
+             <FileCheck className="w-5 h-5" /> Mark Billed
            </button>
            <div className="h-6 w-px bg-white/20"></div>
            <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-full">
@@ -328,7 +359,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               const statusKey = key === 'ALL' ? 'ALL' : key === 'HANDOVER' ? 'HANDOVER' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
               return (
                 <button
-                  key={key}
+                  key={statusKey}
                   onClick={() => setFilterStatus(statusKey)}
                   className={`px-4 py-2 text-sm font-medium rounded-xl transition-all whitespace-nowrap flex items-center gap-2 ${
                     filterStatus === statusKey
@@ -423,7 +454,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               </tr>
             )}
             {filtered.map((m) => {
-               const displayDateRaw = m.status === Status.WORKED && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
+               const displayDateRaw = (m.status === Status.WORKED || m.status === Status.BILLED) && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
                const dateObj = new Date(displayDateRaw);
                const displayDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
                const isActivityToday = isToday(dateObj);
@@ -489,7 +520,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </td>
                   <td className="px-6 py-4 text-center whitespace-nowrap">
                     <div className="flex justify-center items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      {m.status !== Status.WORKED && (
+                      {m.status !== Status.WORKED && m.status !== Status.BILLED && (
                         <>
                           <button onClick={() => handleSendEmail(m)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-all shadow-sm hover:shadow" title="Draft Email (mailto)">
                             <Send className="w-4 h-4" />

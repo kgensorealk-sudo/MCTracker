@@ -171,7 +171,7 @@ const App: React.FC = () => {
 
     if (updates.status && updates.status !== original.status) {
       updatedManuscript.dateStatusChanged = new Date().toISOString();
-      if (updatedManuscript.status === Status.WORKED && !updatedManuscript.completedDate) {
+      if ((updatedManuscript.status === Status.WORKED || updatedManuscript.status === Status.BILLED) && !updatedManuscript.completedDate) {
         updatedManuscript.completedDate = new Date().toISOString();
       }
     }
@@ -192,7 +192,7 @@ const App: React.FC = () => {
     const now = new Date().toISOString();
     const finalUpdates: any = { ...updates, dateStatusChanged: now };
 
-    if (updates.status === Status.WORKED) {
+    if (updates.status === Status.WORKED || updates.status === Status.BILLED) {
       finalUpdates.completedDate = now;
     }
 
@@ -462,6 +462,7 @@ const App: React.FC = () => {
             <HistoryReport 
               manuscripts={manuscripts}
               userName={userName}
+              onBulkUpdate={handleBulkUpdate}
             />
           )}
         </div>

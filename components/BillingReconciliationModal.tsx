@@ -1,25 +1,42 @@
 
-import React, { useState, useMemo } from 'react';
-import { Manuscript } from '../types';
-import { X, ClipboardList, Info, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Manuscript, Status } from '../types';
+import { X, ClipboardList, Info, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, Tag, DollarSign } from 'lucide-react';
 
 interface BillingReconciliationModalProps {
   manuscripts: Manuscript[];
   onClose: () => void;
   sortedCycles: { info: any; files: Manuscript[] }[];
   initialCycleId?: string;
+  onBulkUpdate?: (ids: string[], updates: Partial<Manuscript>) => void;
 }
 
 const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({ 
-  manuscripts, 
+  manuscripts,
   onClose, 
   sortedCycles,
-  initialCycleId 
+  initialCycleId,
+  onBulkUpdate
 }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [selectedCycleId, setSelectedCycleId] = useState(initialCycleId || (sortedCycles.length > 0 ? sortedCycles[0].info.id : ''));
   const [billingInput, setBillingInput] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [activeTab, setActiveTab] = useState<'matched' | 'missing' | 'extra'>('matched');
+  
+  // Salary Calculation State (with local persistence)
+  const [usdRatePerFile, setUsdRatePerFile] = useState<number>(() => {
+    return parseFloat(localStorage.getItem('billing_usd_rate') || '1.19');
+  });
+  const [phpRatePerFile, setPhpRatePerFile] = useState<number>(() => {
+    return parseFloat(localStorage.getItem('billing_php_rate') || '70.41');
+  });
+
+  // Save rates when they change
+  useEffect(() => {
+    localStorage.setItem('billing_usd_rate', usdRatePerFile.toString());
+    localStorage.setItem('billing_php_rate', phpRatePerFile.toString());
+  }, [usdRatePerFile, phpRatePerFile]);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -27,28 +44,65 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   };
 
   const billingAnalysis = useMemo(() => {
-    if (!selectedCycleId) return { unbilled: [], foundCount: 0, totalInCycle: 0 };
+    if (!selectedCycleId) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0 };
     
     const cycleData = sortedCycles.find(c => c.info.id === selectedCycleId);
-    if (!cycleData) return { unbilled: [], foundCount: 0, totalInCycle: 0 };
+    if (!cycleData) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0 };
 
-    const billedIds = new Set(
-      billingInput
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line !== '')
-        .map(id => id.toLowerCase())
-    );
+    const rawInputLines = billingInput
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line !== '');
+    
+    const billedIdsSet = new Set(rawInputLines.map(id => id.toLowerCase()));
 
+    // 1. Matched (In our records for this cycle AND in their list)
     const cycleFiles = cycleData.files;
-    const unbilled = cycleFiles.filter(m => !billedIds.has(m.manuscriptId.toLowerCase()));
+    const matched = cycleFiles.filter(m => billedIdsSet.has(m.manuscriptId.toLowerCase()));
+
+    // 2. Missing from Billing (In our records for this cycle, but NOT in their list)
+    const unbilled = cycleFiles.filter(m => !billedIdsSet.has(m.manuscriptId.toLowerCase()));
+    
+    // 3. Extra in Billing (In their list, but NOT in our records for THIS cycle)
+    const cycleFileIdsSet = new Set(cycleFiles.map(m => m.manuscriptId.toLowerCase()));
+    const extraIds = rawInputLines.filter(id => !cycleFileIdsSet.has(id.toLowerCase()));
+
+    const extraCategorized = extraIds.map(id => {
+      const lowerId = id.toLowerCase();
+      const match = manuscripts.find(m => m.manuscriptId.toLowerCase() === lowerId);
+      
+      if (match) {
+        const actualCycle = sortedCycles.find(c => c.files.some(f => f.id === match.id));
+        return {
+          id,
+          type: 'other_cycle' as const,
+          cycleLabel: actualCycle?.info.label || 'Unknown Cycle'
+        };
+      }
+      return {
+        id,
+        type: 'unknown' as const
+      };
+    });
     
     return {
        unbilled,
+       extra: extraCategorized,
+       matched,
        foundCount: cycleFiles.length - unbilled.length,
        totalInCycle: cycleFiles.length
     };
-  }, [billingInput, selectedCycleId, sortedCycles]);
+  }, [billingInput, selectedCycleId, sortedCycles, manuscripts]);
+
+  // Projected Salary Logic
+  const salaryProjection = useMemo(() => {
+    const billedCount = billingAnalysis.matched.length;
+    const totalPhp = billedCount * phpRatePerFile;
+    const totalUsd = billedCount * usdRatePerFile;
+    const impliedFxRate = usdRatePerFile > 0 ? phpRatePerFile / usdRatePerFile : 0;
+    
+    return { totalPhp, totalUsd, billedCount, impliedFxRate };
+  }, [billingAnalysis.matched, usdRatePerFile, phpRatePerFile]);
 
   const handleCopyUnbilled = () => {
     const text = billingAnalysis.unbilled.map(m => m.manuscriptId).join('\n');
@@ -57,9 +111,24 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
+  const handleMarkAsBilled = () => {
+    const idsToUpdate = billingAnalysis.matched
+      .filter(m => m.status === Status.WORKED)
+      .map(m => m.id);
+
+    if (idsToUpdate.length === 0) {
+      alert("No matched 'Worked' files found to update.");
+      return;
+    }
+
+    if (window.confirm(`Mark ${idsToUpdate.length} matched files as 'Billed'? This updates their status in the database.`)) {
+      onBulkUpdate?.(idsToUpdate, { status: Status.BILLED });
+    }
+  };
+
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md ${isClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
+      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col border border-slate-200 ${isClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
         
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
@@ -69,7 +138,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800">Billing Reconciliation</h2>
-              <p className="text-sm text-slate-500 font-medium">Identify discrepancies between your records and billed files.</p>
+              <p className="text-sm text-slate-500 font-medium">Verify confirmed files and calculate expected salary in PHP.</p>
             </div>
           </div>
           <button onClick={handleClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
@@ -82,14 +151,14 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
             
             {/* Input Side */}
-            <div className="lg:col-span-5 space-y-6">
+            <div className="lg:col-span-4 space-y-6">
                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-2">
-                       <Search className="w-3.5 h-3.5" /> 1. Select Cycle
+                       <Search className="w-3.5 h-3.5" /> Select Cycle
                     </label>
                     <select 
-                      className="w-full text-sm border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 py-3 px-4 font-semibold text-slate-700"
+                      className="w-full text-sm border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 py-3 px-4 font-semibold text-slate-700 transition-all"
                       value={selectedCycleId}
                       onChange={(e) => setSelectedCycleId(e.target.value)}
                     >
@@ -103,102 +172,265 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                   
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-2">
-                       <FileText className="w-3.5 h-3.5" /> 2. Paste Billed IDs
+                       <FileText className="w-3.5 h-3.5" /> Billed ID List
                     </label>
                     <textarea 
-                      className="w-full h-64 text-sm font-mono p-4 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 resize-none custom-scrollbar leading-relaxed"
-                      placeholder="Tfs_124519&#10;Sct_133166&#10;Est_120421&#10;..."
+                      className="w-full h-40 text-sm font-mono p-4 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 resize-none custom-scrollbar leading-relaxed"
+                      placeholder="Paste IDs here..."
                       value={billingInput}
                       onChange={(e) => setBillingInput(e.target.value)}
                     />
-                    <div className="mt-3 flex items-start gap-2 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
-                      <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                      <p className="text-[10px] text-indigo-700 leading-normal font-medium">
-                        Paste the raw list of IDs directly from your billing sheet. One ID per line.
-                      </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 space-y-4">
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                       <Calculator className="w-3.5 h-3.5" /> Payout Settings
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                             <DollarSign className="w-2.5 h-2.5" /> USD Rate
+                          </label>
+                          <input 
+                             type="number" 
+                             step="0.0001"
+                             className="w-full text-sm border-slate-200 rounded-lg bg-slate-50 py-2 px-3 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all"
+                             value={usdRatePerFile}
+                             onChange={(e) => setUsdRatePerFile(parseFloat(e.target.value) || 0)}
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                             <Coins className="w-2.5 h-2.5" /> PHP Rate
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">₱</span>
+                            <input 
+                               type="number" 
+                               step="0.01"
+                               className="w-full text-sm border-slate-200 rounded-lg bg-slate-50 py-2 pl-6 pr-3 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all"
+                               value={phpRatePerFile}
+                               onChange={(e) => setPhpRatePerFile(parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+                       </div>
+                    </div>
+                    
+                    <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 flex justify-between items-center">
+                       <div className="flex items-center gap-2">
+                          <Globe className="w-3.5 h-3.5 text-indigo-400" />
+                          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Implied FX Rate:</span>
+                       </div>
+                       <span className="text-sm font-bold text-indigo-700 font-mono">{salaryProjection.impliedFxRate.toFixed(4)}</span>
                     </div>
                   </div>
                </div>
             </div>
 
             {/* Results Side */}
-            <div className="lg:col-span-7 flex flex-col min-h-0">
+            <div className="lg:col-span-8 flex flex-col min-h-0">
                {!billingInput ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border-2 border-dashed border-slate-200 opacity-60">
-                     <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
-                     <p className="text-slate-500 font-medium">Waiting for input...</p>
-                     <p className="text-xs text-slate-400 mt-1 max-w-xs">Paste your billed IDs on the left to start the real-time comparison.</p>
+                     <Coins className="w-12 h-12 text-slate-300 mb-4" />
+                     <p className="text-slate-500 font-medium">Ready to Calculate</p>
+                     <p className="text-xs text-slate-400 mt-1 max-w-xs">Paste your billed IDs and adjust rates to see your PHP salary projection.</p>
                   </div>
                ) : (
                   <div className="flex flex-col h-full space-y-6 animate-page-enter">
-                     {/* Stats Bar */}
-                     <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                           <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">In Records</p>
-                           <p className="text-xl font-bold text-slate-800">{billingAnalysis.totalInCycle}</p>
+                     {/* Salary Projection Dashboard */}
+                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <div className="md:col-span-8 bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 p-6 rounded-2xl shadow-xl flex items-center gap-6 text-white relative overflow-hidden group border border-indigo-500/20">
+                           <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4 group-hover:scale-110 transition-transform">
+                              <Coins className="w-32 h-32" />
+                           </div>
+                           <div className="p-4 bg-white/10 rounded-2xl shrink-0 backdrop-blur-md border border-white/20">
+                              <TrendingUp className="w-8 h-8 text-indigo-200" />
+                           </div>
+                           <div className="flex-1">
+                              <p className="text-xs font-bold text-indigo-200 uppercase tracking-widest mb-1 opacity-80">Cycle Salary Projection</p>
+                              <div className="flex items-baseline gap-3">
+                                 <h3 className="text-4xl font-black tracking-tighter">₱{salaryProjection.totalPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+                              </div>
+                              <div className="mt-3 flex items-center gap-4 text-[11px] font-bold">
+                                 <span className="px-2 py-1 bg-black/30 rounded-lg backdrop-blur-sm border border-white/10 flex items-center gap-1.5 text-emerald-400">
+                                    <FileCheck className="w-3 h-3" /> {salaryProjection.billedCount} Billed
+                                 </span>
+                                 <span className="px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm border border-white/5 text-indigo-100">
+                                    Gross: ${salaryProjection.totalUsd.toFixed(2)} USD
+                                 </span>
+                              </div>
+                           </div>
                         </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                           <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Billed</p>
-                           <p className="text-xl font-bold text-emerald-600">{billingAnalysis.foundCount}</p>
-                        </div>
-                        <div className={`p-4 rounded-xl border shadow-sm text-center transition-colors ${billingAnalysis.unbilled.length > 0 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                           <p className={`text-[10px] font-bold uppercase mb-1 ${billingAnalysis.unbilled.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Unbilled</p>
-                           <p className={`text-xl font-bold ${billingAnalysis.unbilled.length > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{billingAnalysis.unbilled.length}</p>
+
+                        <div className="md:col-span-4 flex flex-col gap-3">
+                           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col justify-center">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Matched</p>
+                              <p className="text-xl font-bold text-indigo-600">{billingAnalysis.foundCount}</p>
+                           </div>
+                           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col justify-center">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Missing</p>
+                              <p className="text-xl font-bold text-rose-600">{billingAnalysis.unbilled.length}</p>
+                           </div>
                         </div>
                      </div>
 
-                     {/* Result Details */}
+                     {/* Tabbed List View */}
                      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
-                           <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                              {billingAnalysis.unbilled.length > 0 ? (
-                                 <AlertTriangle className="w-4 h-4 text-rose-500" />
-                              ) : (
-                                 <CheckCircle className="w-4 h-4 text-emerald-500" />
-                              )}
-                              {billingAnalysis.unbilled.length > 0 ? 'Unbilled Items Detected' : 'All Accounts Match'}
-                           </h3>
-                           {billingAnalysis.unbilled.length > 0 && (
-                              <button 
-                                onClick={handleCopyUnbilled}
-                                className={`text-[10px] font-bold uppercase px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-all ${
-                                  copyFeedback ? 'bg-emerald-500 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-                                }`}
-                              >
-                                {copyFeedback ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                                {copyFeedback ? 'Copied' : 'Copy List'}
-                              </button>
-                           )}
+                        <div className="border-b border-slate-100 flex p-1.5 bg-slate-50/50">
+                           <button 
+                             onClick={() => setActiveTab('matched')}
+                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                               activeTab === 'matched' ? 'bg-white shadow text-indigo-600 border border-indigo-100' : 'text-slate-500 hover:bg-white/50'
+                             }`}
+                           >
+                              Matched ({billingAnalysis.matched.length})
+                           </button>
+                           <button 
+                             onClick={() => setActiveTab('missing')}
+                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                               activeTab === 'missing' ? 'bg-white shadow text-rose-600 border border-rose-100' : 'text-slate-500 hover:bg-white/50'
+                             }`}
+                           >
+                              Missing ({billingAnalysis.unbilled.length})
+                           </button>
+                           <button 
+                             onClick={() => setActiveTab('extra')}
+                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                               activeTab === 'extra' ? 'bg-white shadow text-amber-600 border border-amber-100' : 'text-slate-500 hover:bg-white/50'
+                             }`}
+                           >
+                              Extra ({billingAnalysis.extra.length})
+                           </button>
                         </div>
-                        
-                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                           {billingAnalysis.unbilled.length > 0 ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                 {billingAnalysis.unbilled.map(m => (
-                                    <div key={m.id} className="p-3 bg-rose-50/30 border border-rose-100 rounded-xl hover:bg-rose-50 transition-colors group">
-                                       <div className="flex justify-between items-start">
-                                          <div>
-                                             <p className="font-bold text-slate-800 text-sm">{m.manuscriptId}</p>
-                                             <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase">{m.journalCode}</p>
-                                          </div>
-                                          <div className="text-right">
-                                             <p className="text-[10px] text-rose-600 font-bold">MISSING</p>
-                                             <p className="text-[9px] text-slate-400 mt-1">{new Date(m.completedDate || '').toLocaleDateString()}</p>
-                                          </div>
+
+                        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-slate-50/20">
+                           {activeTab === 'matched' ? (
+                              billingAnalysis.matched.length > 0 ? (
+                                <div className="space-y-4">
+                                   <div className="flex justify-between items-center px-1">
+                                      <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                         <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                         <span>Successfully matched with your records.</span>
+                                      </div>
+                                      <button 
+                                         onClick={handleMarkAsBilled}
+                                         className="text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 shadow-md transition-all active:scale-95"
+                                      >
+                                         <FileCheck className="w-3.5 h-3.5" />
+                                         Mark as Billed
+                                      </button>
+                                   </div>
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {billingAnalysis.matched.map(m => (
+                                         <div key={m.id} className={`p-3 border rounded-xl transition-all ${m.status === Status.BILLED ? 'bg-indigo-50/30 border-indigo-100 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                            <div className="flex justify-between items-start">
+                                               <div>
+                                                  <p className="font-bold text-slate-800 text-sm">{m.manuscriptId}</p>
+                                                  <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-tighter">{m.journalCode}</p>
+                                               </div>
+                                               <div className="text-right flex flex-col items-end">
+                                                  <p className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${m.status === Status.BILLED ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.status}</p>
+                                                  <p className="text-[11px] text-emerald-600 mt-1.5 font-bold font-mono">+₱{phpRatePerFile.toFixed(2)}</p>
+                                               </div>
+                                            </div>
+                                         </div>
+                                      ))}
+                                   </div>
+                                </div>
+                              ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center py-12 opacity-50">
+                                   <Search className="w-12 h-12 text-slate-300 mb-4" />
+                                   <p className="text-sm text-slate-500 font-medium">No matches found in this cycle.</p>
+                                </div>
+                              )
+                           ) : activeTab === 'missing' ? (
+                              billingAnalysis.unbilled.length > 0 ? (
+                                 <div className="space-y-4">
+                                    <div className="flex justify-between items-center px-1">
+                                       <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                          <AlertTriangle className="w-4 h-4 text-rose-500" />
+                                          <span>These files are in our records but <strong>not</strong> in the billed list. Unclaimed: <strong>₱{(billingAnalysis.unbilled.length * phpRatePerFile).toFixed(2)}</strong></span>
                                        </div>
+                                       <button 
+                                          onClick={handleCopyUnbilled}
+                                          className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all ${
+                                            copyFeedback ? 'bg-emerald-500 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                                          }`}
+                                       >
+                                          {copyFeedback ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                          Copy List
+                                       </button>
                                     </div>
-                                 ))}
-                              </div>
-                           ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-                                    <CheckCircle className="w-8 h-8 text-emerald-600" />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                       {billingAnalysis.unbilled.map(m => (
+                                          <div key={m.id} className="p-3 bg-rose-50/20 border border-rose-100 rounded-xl transition-all">
+                                             <div className="flex justify-between items-start">
+                                                <div>
+                                                   <p className="font-bold text-slate-800 text-sm">{m.manuscriptId}</p>
+                                                   <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-tighter">{m.journalCode}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                   <p className="text-[10px] text-rose-600 font-bold uppercase bg-rose-50 px-1.5 py-0.5 rounded">{m.status.replace(/_/g, ' ')}</p>
+                                                   <p className="text-[9px] text-slate-400 mt-2 font-medium">{new Date(m.completedDate || m.dateStatusChanged || '').toLocaleDateString()}</p>
+                                                </div>
+                                             </div>
+                                          </div>
+                                       ))}
+                                    </div>
                                  </div>
-                                 <h4 className="font-bold text-slate-800 text-lg">Perfect Sync</h4>
-                                 <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
-                                    Every WORKED record in your system for this cycle is present in the billing list provided.
-                                 </p>
-                              </div>
+                              ) : (
+                                 <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                                    <CheckCircle className="w-12 h-12 text-emerald-500 mb-4" />
+                                    <h4 className="font-bold text-slate-800">Perfect Sync</h4>
+                                    <p className="text-sm text-slate-500 max-w-xs mt-2 font-medium">Your work matches the billing report perfectly.</p>
+                                 </div>
+                              )
+                           ) : (
+                              billingAnalysis.extra.length > 0 ? (
+                                 <div className="space-y-4">
+                                    <div className="flex items-center gap-2 text-xs text-slate-500 px-1 font-medium">
+                                       <HelpCircle className="w-4 h-4 text-amber-500" />
+                                       <span>These IDs were found in the billed list but are <strong>not</strong> in the current cycle's database.</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                       {billingAnalysis.extra.map((item, idx) => (
+                                          <div key={idx} className={`p-3 rounded-xl border transition-all ${
+                                             item.type === 'other_cycle' ? 'bg-amber-50/30 border-amber-100' : 'bg-white border-slate-200 shadow-sm'
+                                          }`}>
+                                             <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                   <p className="font-bold text-slate-800 text-sm">{item.id}</p>
+                                                   {item.type === 'other_cycle' ? (
+                                                      <div className="mt-1 flex items-center gap-1">
+                                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold uppercase tracking-tight flex items-center gap-1">
+                                                            <ExternalLink className="w-2.5 h-2.5" /> 
+                                                            Found in {item.cycleLabel}
+                                                         </span>
+                                                      </div>
+                                                   ) : (
+                                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold mt-1 uppercase">
+                                                         Not in database
+                                                      </span>
+                                                   )}
+                                                </div>
+                                                <div className="text-right">
+                                                   <p className={`text-[10px] font-bold ${item.type === 'other_cycle' ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                      {item.type === 'other_cycle' ? 'WRONG CYCLE' : 'NOT FOUND'}
+                                                   </p>
+                                                </div>
+                                             </div>
+                                          </div>
+                                       ))}
+                                    </div>
+                                 </div>
+                              ) : (
+                                 <div className="h-full flex flex-col items-center justify-center text-center py-12 opacity-50">
+                                    <div className="p-4 bg-slate-100 rounded-full mb-4">
+                                       <CheckCircle className="w-8 h-8 text-slate-400" />
+                                    </div>
+                                    <p className="text-sm text-slate-500 font-medium">No extra IDs found in the report.</p>
+                                 </div>
+                              )
                            )}
                         </div>
                      </div>
@@ -214,7 +446,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
              onClick={handleClose}
              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
            >
-             Done Reconciling <ArrowRight className="w-4 h-4" />
+             Finish Reconciliation <ArrowRight className="w-4 h-4" />
            </button>
         </div>
       </div>

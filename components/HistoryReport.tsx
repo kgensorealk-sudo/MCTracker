@@ -1,13 +1,14 @@
 
 import React, { useMemo, useState } from 'react';
 import { Manuscript, Status } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Zap, AlertCircle, HelpCircle, LayoutGrid, CheckCircle, ClipboardList, AlertTriangle, FileSearch, ArrowRight, Info } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { Trophy, TrendingUp, Clock, FileText, History, Search, Zap, LayoutGrid, ClipboardList, FileSearch, AlertCircle, BarChart3 } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
   manuscripts: Manuscript[];
   userName: string;
+  onBulkUpdate: (ids: string[], updates: Partial<Manuscript>) => void;
 }
 
 interface CycleInfo {
@@ -17,7 +18,7 @@ interface CycleInfo {
   endDate: Date;
 }
 
-const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
+const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate }) => {
   const [selectedCycleId, setSelectedCycleId] = useState<string>('');
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
 
@@ -36,7 +37,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
     if (day >= 11 && day <= 25) {
       startDate = new Date(year, month, 11);
       endDate = new Date(year, month, 25);
-      label = `11 - 25 ${startDate.toLocaleString('default', { month: 'short' })} ${year}`;
+      label = `11-25 ${startDate.toLocaleString('default', { month: 'short' })} ${year}`;
       id = `${year}-${String(month + 1).padStart(2, '0')}-C1`;
     } else {
       if (day >= 26) {
@@ -90,8 +91,8 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
     };
 
     manuscripts.forEach(m => {
-      // 1. Monthly Stats (Worked only)
-      if (m.status === Status.WORKED) {
+      // 1. Monthly Stats (Worked and Billed items count as "Worked" for history)
+      if (m.status === Status.WORKED || m.status === Status.BILLED) {
         const workDate = m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived;
         const monthKey = getMonthKey(workDate);
         
@@ -120,7 +121,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
       }
 
       // 3. Daily Stats Tracking
-      if (m.status === Status.WORKED) {
+      if (m.status === Status.WORKED || m.status === Status.BILLED) {
          const raw = m.completedDate || m.dateStatusChanged || m.dateUpdated;
          if (raw) {
              const d = raw.split('T')[0];
@@ -202,6 +203,12 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
     // Sorted Cycles for dropdown
     const sortedCycles = Object.values(cycleGroups).sort((a, b) => b.info.id.localeCompare(a.info.id));
 
+    // Cycle performance data for the new graph
+    const cycleChartData = [...sortedCycles].reverse().map(c => ({
+      name: c.info.label.split(' (')[0],
+      count: c.files.length
+    }));
+
     return {
       chartData,
       topCycle,
@@ -213,7 +220,8 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
         peakActivity: { ...maxActivityDay, label: maxActivityDay.date !== 'N/A' ? new Date(maxActivityDay.date).toLocaleDateString() : 'N/A' }
       },
       cycleGroups,
-      sortedCycles
+      sortedCycles,
+      cycleChartData
     };
   }, [manuscripts]);
 
@@ -295,7 +303,76 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
           </div>
       </div>
 
-      {/* Cycle History Table (Now full width and prominent) */}
+      {/* Cycle Performance Graph */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-6">
+              <div>
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-indigo-500" /> Cycle Output History
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">Completion volume per individual billing cycle (11th-25th & 26th-10th)</p>
+              </div>
+              <div className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                  Performance Trend
+              </div>
+          </div>
+          <div className="h-[300px] w-full">
+              {stats.cycleChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <defs>
+                              <linearGradient id="cycleGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#4f46e5" stopOpacity={1} />
+                                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
+                              </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis 
+                              dataKey="name" 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                              interval={0}
+                              angle={-10}
+                              textAnchor="end"
+                              height={50}
+                          />
+                          <YAxis 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                          />
+                          <Tooltip 
+                              cursor={{ fill: '#f8fafc' }}
+                              content={({ active, payload, label }) => {
+                                  if (active && payload && payload.length) {
+                                      return (
+                                          <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs">
+                                              <p className="font-bold mb-1 opacity-70">{label}</p>
+                                              <p className="text-base">Files: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
+                                          </div>
+                                      );
+                                  }
+                                  return null;
+                              }}
+                          />
+                          <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={60} isAnimationActive={false}>
+                            {stats.cycleChartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
+                            ))}
+                          </Bar>
+                      </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                      <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
+                      <p className="text-sm font-medium">Insufficient cycle history to display graph.</p>
+                  </div>
+              )}
+          </div>
+      </div>
+
+      {/* Cycle History Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-page-enter">
          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -303,7 +380,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                   <FileSearch className="w-5 h-5" />
                </div>
                <div>
-                  <h3 className="font-bold text-slate-800">Cycle Worked History</h3>
+                  <h3 className="font-bold text-slate-800">Cycle Worked Details</h3>
                   <p className="text-xs text-slate-500 font-medium">Detailed breakdown of files handled per cycle</p>
                </div>
             </div>
@@ -322,11 +399,12 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
             </div>
          </div>
          
-         <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+         <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
             <table className="w-full text-sm text-center">
                <thead className="bg-slate-50/80 text-slate-500 font-bold text-[11px] uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                      <th className="px-6 py-4">Manuscript ID</th>
+                     <th className="px-6 py-4">Status</th>
                      <th className="px-6 py-4">Journal</th>
                      <th className="px-6 py-4">Received</th>
                      <th className="px-6 py-4">Completed</th>
@@ -336,7 +414,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                <tbody className="divide-y divide-slate-100">
                   {!selectedCycleId || stats.cycleGroups[selectedCycleId]?.files.length === 0 ? (
                      <tr>
-                        <td colSpan={5} className="px-6 py-24 text-center text-slate-400">
+                        <td colSpan={6} className="px-6 py-24 text-center text-slate-400">
                            <div className="flex flex-col items-center gap-2">
                               <Search className="w-8 h-8 opacity-20" />
                               <p>No records found for this cycle.</p>
@@ -353,6 +431,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                         return (
                            <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                               <td className="px-6 py-4 font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{m.manuscriptId}</td>
+                              <td className="px-6 py-4 text-center">
+                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-tight ${
+                                   m.status === Status.BILLED ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
+                                 }`}>
+                                   {m.status === Status.BILLED ? 'Billed' : 'Worked'}
+                                 </span>
+                              </td>
                               <td className="px-6 py-4 text-slate-500 font-mono text-[11px] uppercase tracking-tighter">{m.journalCode}</td>
                               <td className="px-6 py-4 text-slate-600 font-medium">{new Date(m.dateReceived).toLocaleDateString()}</td>
                               <td className="px-6 py-4">
@@ -377,7 +462,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
          </div>
       </div>
 
-      {/* Charts Section */}
+      {/* Monthly Statistics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
@@ -389,7 +474,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                     Volume Metric
                  </div>
               </div>
-              <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per month.</p>
+              <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per calendar month.</p>
            </div>
            <div className="h-[300px] w-full flex-1 min-h-[300px]">
               {stats.chartData.length > 0 ? (
@@ -480,6 +565,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
             onClose={() => setIsReconModalOpen(false)}
             sortedCycles={stats.sortedCycles}
             initialCycleId={selectedCycleId}
+            onBulkUpdate={onBulkUpdate}
          />
       )}
     </div>

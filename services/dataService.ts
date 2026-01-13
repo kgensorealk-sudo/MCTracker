@@ -48,7 +48,7 @@ const getLocalSettings = () => {
 export const dataService = {
   // --- Manuscripts ---
   
-  async getManuscripts(forceLocal = false) {
+  async getManuscripts(forceLocal = false): Promise<Manuscript[]> {
     if (!isSupabaseConfigured || forceLocal) {
       return getLocalManuscripts();
     }
@@ -71,7 +71,7 @@ export const dataService = {
     }
   },
 
-  async createManuscript(m: Manuscript, forceLocal = false) {
+  async createManuscript(m: Manuscript, forceLocal = false): Promise<Manuscript> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalManuscripts();
       const newItem = { ...m, id: m.id || crypto.randomUUID() };
@@ -115,7 +115,7 @@ export const dataService = {
     }
   },
 
-  async updateManuscript(m: Manuscript, forceLocal = false) {
+  async updateManuscript(m: Manuscript, forceLocal = false): Promise<Manuscript> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalManuscripts();
       const updated = current.map((item: Manuscript) => item.id === m.id ? m : item);
@@ -159,7 +159,7 @@ export const dataService = {
     }
   },
 
-  async updateManuscripts(ids: string[], updates: Partial<Manuscript>, forceLocal = false) {
+  async updateManuscripts(ids: string[], updates: Partial<Manuscript>, forceLocal = false): Promise<void> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalManuscripts();
       const now = new Date().toISOString();
@@ -198,7 +198,7 @@ export const dataService = {
     }
   },
 
-  async deleteManuscript(id: string, forceLocal = false) {
+  async deleteManuscript(id: string, forceLocal = false): Promise<void> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalManuscripts();
       const updated = current.filter((item: Manuscript) => item.id !== id);
@@ -254,7 +254,7 @@ export const dataService = {
     }
   },
 
-  async updateTarget(target: number, forceLocal = false) {
+  async updateTarget(target: number, forceLocal = false): Promise<void> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, targetPerCycle: target }));
@@ -276,7 +276,7 @@ export const dataService = {
     }
   },
 
-  async updateSchedule(schedule: UserSchedule, forceLocal = false) {
+  async updateSchedule(schedule: UserSchedule, forceLocal = false): Promise<void> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, userSchedule: schedule }));

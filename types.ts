@@ -4,7 +4,8 @@ export enum Status {
   WORKED = 'WORKED', // Completed/Publication Ready
   PENDING_JM = 'PENDING_JM', // Pending: Queried to JM
   PENDING_TL = 'PENDING_TL', // Pending: with TL Query
-  PENDING_CED = 'PENDING_CED' // Pending: Email CED
+  PENDING_CED = 'PENDING_CED', // Pending: Email CED
+  BILLED = 'BILLED' // Confirmed in billing cycle
 }
 
 export interface Note {
