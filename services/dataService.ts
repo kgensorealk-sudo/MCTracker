@@ -1,4 +1,5 @@
 
+
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Manuscript, UserSchedule } from '../types';
 
@@ -12,6 +13,7 @@ const mapToManuscript = (row: any): Manuscript => ({
   dateReceived: row.date_received,
   dueDate: row.due_date,
   completedDate: row.completed_date,
+  billedDate: row.billed_date,
   dateUpdated: row.date_updated,
   dateStatusChanged: row.date_status_changed,
   queryReason: row.query_reason, 
@@ -102,6 +104,7 @@ export const dataService = {
           date_received: m.dateReceived,
           due_date: m.dueDate,
           completed_date: m.completedDate,
+          billed_date: m.billedDate,
           date_updated: new Date().toISOString(),
           date_status_changed: m.dateStatusChanged,
           query_reason: m.queryReason,
@@ -144,6 +147,7 @@ export const dataService = {
           date_received: m.dateReceived,
           due_date: m.dueDate,
           completed_date: m.completedDate,
+          billed_date: m.billedDate,
           date_updated: new Date().toISOString(),
           date_status_changed: m.dateStatusChanged,
           query_reason: m.queryReason,
@@ -190,6 +194,7 @@ export const dataService = {
       if (updates.priority) dbUpdates.priority = updates.priority;
       if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
       if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
+      if (updates.billedDate !== undefined) dbUpdates.billed_date = updates.billedDate;
       if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
       if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
       if (updates.dateEmailed !== undefined) dbUpdates.date_emailed = updates.dateEmailed;
@@ -296,6 +301,7 @@ export const dataService = {
       const user = await getSafeUser();
       if (!user) return this.updateSchedule(schedule, true);
 
+      // Fix: Use correct camelCase property names from the UserSchedule interface
       const { error } = await supabase
         .from('user_settings')
         .upsert({ 

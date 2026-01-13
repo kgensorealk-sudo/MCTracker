@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { X, Database, Copy, Check, Terminal, Info, History, Calculator } from 'lucide-react';
 
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS manuscripts (
 ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS query_reason TEXT;
 ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS date_queried TIMESTAMPTZ;
 ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS date_emailed TIMESTAMPTZ;
+ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS billed_date TIMESTAMPTZ;
 
 -- Security Policies
 ALTER TABLE manuscripts ENABLE ROW LEVEL SECURITY;
@@ -123,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_manuscripts_user_updated ON manuscripts (user_id,
                     <div>
                       <h4 className="text-xs font-bold text-slate-700">Syncs Schema</h4>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                        Ensures your database has the <code>query_reason</code> and <code>date_queried</code> columns required for the new reporting features.
+                        Ensures your database has the <code>query_reason</code>, <code>date_queried</code>, and <code>billed_date</code> columns required for reporting.
                       </p>
                     </div>
                   </div>

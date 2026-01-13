@@ -22,6 +22,7 @@ export interface Manuscript {
   dateReceived: string; // ISO string (Date Sent)
   dueDate?: string; // ISO string
   completedDate?: string; // ISO string - Explicit completion date for WORKED items
+  billedDate?: string; // ISO string - The date this item was credited for payment
   dateUpdated: string; // ISO string
   dateStatusChanged?: string; // ISO string - New field for tracking exact completion/status change time
   queryReason?: string; // Reason for the query (e.g. Figure Replacement, Missing Info)

@@ -18,21 +18,30 @@ interface CycleInfo {
   endDate: Date;
 }
 
+interface RateProfile {
+  usd: number;
+  php: number;
+}
+
+const DEFAULT_RATES: RateProfile = { usd: 1.19, php: 70.41 };
+
 const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate }) => {
   const [selectedCycleId, setSelectedCycleId] = useState<string>('');
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
   const [showRateSettings, setShowRateSettings] = useState(false);
   
-  // Rate state matching BillingReconciliationModal for consistency
-  const [usdRate, setUsdRate] = useState<number>(() => parseFloat(localStorage.getItem('billing_usd_rate') || '1.19'));
-  const [phpRate, setPhpRate] = useState<number>(() => parseFloat(localStorage.getItem('billing_php_rate') || '70.41'));
+  // Per-cycle rates state
+  const [cycleRates, setCycleRates] = useState<Record<string, RateProfile>>(() => {
+    try {
+      const stored = localStorage.getItem('mc_tracker_cycle_rates');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
 
   useEffect(() => {
-    localStorage.setItem('billing_usd_rate', usdRate.toString());
-    localStorage.setItem('billing_php_rate', phpRate.toString());
-  }, [usdRate, phpRate]);
+    localStorage.setItem('mc_tracker_cycle_rates', JSON.stringify(cycleRates));
+  }, [cycleRates]);
 
-  // Helper: Determine which Cycle a date belongs to
   const getCycleForDate = (dateStr: string): CycleInfo => {
     const d = new Date(dateStr);
     const day = d.getDate();
@@ -64,14 +73,12 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
-
     return { id, label, startDate, endDate };
   };
 
   const stats = useMemo(() => {
     const months: Record<string, { count: number; totalTat: number; countWithTat: number }> = {};
     const cycleGroups: Record<string, { info: CycleInfo; files: Manuscript[] }> = {};
-    let totalWorked = 0;
     
     const getMonthKey = (dateStr: string) => {
       try {
@@ -89,17 +96,16 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
     manuscripts.forEach(m => {
       if (m.status === Status.WORKED || m.status === Status.BILLED) {
-        // Deterministic Date Selection: 
-        // 1. completedDate is the most accurate work timestamp.
-        // 2. dateStatusChanged is used for fresh WORKED items.
-        // 3. dateUpdated/Received as safety fallbacks.
-        const workDate = m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived;
+        // Deterministic Date Logic: Use billedDate if available, otherwise completed/status changed.
+        const workDate = (m.status === Status.BILLED && m.billedDate) 
+          ? m.billedDate 
+          : (m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived);
+          
         const monthKey = getMonthKey(workDate);
         
         if (monthKey) {
             if (!months[monthKey]) months[monthKey] = { count: 0, totalTat: 0, countWithTat: 0 };
             months[monthKey].count += 1;
-            totalWorked++;
             const start = new Date(m.dateReceived).getTime();
             const end = new Date(workDate).getTime();
             if (!isNaN(start) && !isNaN(end)) {
@@ -125,16 +131,30 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       .sort((a, b) => a.key.localeCompare(b.key));
 
     const sortedCycles = Object.values(cycleGroups).sort((a, b) => b.info.id.localeCompare(a.info.id));
+    
+    // Multi-rate aware calculations
+    let totalWorked = 0;
+    let totalEarningsPhp = 0;
+    let totalEarningsUsd = 0;
 
-    const cycleChartData = [...sortedCycles].reverse().map(c => ({
-      name: c.info.label.split(' (')[0],
-      count: c.files.length,
-      earnings: c.files.length * phpRate,
-      usd: c.files.length * usdRate
-    }));
+    const cycleChartData = [...sortedCycles].reverse().map(c => {
+      const rates = cycleRates[c.info.id] || DEFAULT_RATES;
+      const count = c.files.length;
+      const php = count * rates.php;
+      const usd = count * rates.usd;
+      
+      totalWorked += count;
+      totalEarningsPhp += php;
+      totalEarningsUsd += usd;
 
-    const totalEarningsPhp = totalWorked * phpRate;
-    const totalEarningsUsd = totalWorked * usdRate;
+      return {
+        name: c.info.label.split(' (')[0],
+        count,
+        earnings: php,
+        usd: usd,
+        id: c.info.id
+      };
+    });
 
     return {
       chartData,
@@ -145,31 +165,52 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       sortedCycles,
       cycleChartData
     };
-  }, [manuscripts, phpRate, usdRate]);
+  }, [manuscripts, cycleRates]);
 
-  if (stats.sortedCycles.length > 0 && !selectedCycleId) {
-     setSelectedCycleId(stats.sortedCycles[0].info.id);
-  }
+  // Safely initialize or reset selectedCycleId
+  useEffect(() => {
+    if (stats.sortedCycles.length > 0) {
+      const exists = stats.sortedCycles.some(c => c.info.id === selectedCycleId);
+      if (!selectedCycleId || !exists) {
+        setSelectedCycleId(stats.sortedCycles[0].info.id);
+      }
+    } else {
+      setSelectedCycleId('');
+    }
+  }, [stats.sortedCycles, selectedCycleId]);
 
   const selectedCycleStats = useMemo(() => {
     if (!selectedCycleId || !stats.cycleGroups[selectedCycleId]) return null;
-    const files = stats.cycleGroups[selectedCycleId].files;
+    const cycle = stats.cycleGroups[selectedCycleId];
+    if (!cycle || !cycle.files) return null;
+
+    const rates = cycleRates[selectedCycleId] || DEFAULT_RATES;
+    const files = cycle.files;
     const billedCount = files.filter(f => f.status === Status.BILLED).length;
     const workedCount = files.filter(f => f.status === Status.WORKED).length;
+    
     return {
         total: files.length,
         billedCount,
         workedCount,
-        percentBilled: Math.round((billedCount / files.length) * 100),
-        pendingPhp: workedCount * phpRate,
-        billedPhp: billedCount * phpRate
+        percentBilled: files.length > 0 ? Math.round((billedCount / files.length) * 100) : 0,
+        pendingPhp: workedCount * rates.php,
+        billedPhp: billedCount * rates.php,
+        rates
     };
-  }, [selectedCycleId, stats.cycleGroups, phpRate]);
+  }, [selectedCycleId, stats.cycleGroups, cycleRates]);
+
+  const updateSelectedCycleRate = (key: keyof RateProfile, value: number) => {
+    if (!selectedCycleId) return;
+    const current = cycleRates[selectedCycleId] || DEFAULT_RATES;
+    setCycleRates(prev => ({
+      ...prev,
+      [selectedCycleId]: { ...current, [key]: value }
+    }));
+  };
 
   return (
     <div className="space-y-8 animate-fade-in-up pb-12">
-      
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
@@ -196,37 +237,43 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         </div>
       </div>
 
-      {/* Rate Configuration Popover */}
-      {showRateSettings && (
-         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-fade-in-up grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+      {showRateSettings && selectedCycleId && (
+         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-fade-in-up grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+            <div className="md:col-span-1">
+               <p className="text-[10px] font-bold text-indigo-400 uppercase mb-2">Selected Cycle</p>
+               <p className="text-sm font-bold text-indigo-900 truncate">{stats.cycleGroups[selectedCycleId]?.info.label}</p>
+            </div>
             <div>
               <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <DollarSign className="w-3 h-3" /> Rate Per File (USD)
+                <DollarSign className="w-3 h-3" /> Cycle Rate (USD)
               </label>
               <input 
                 type="number" step="0.01" 
                 className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-2.5 font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 transition-all"
-                value={usdRate} onChange={e => setUsdRate(parseFloat(e.target.value) || 0)}
+                value={selectedCycleStats?.rates.usd || 0} 
+                onChange={e => updateSelectedCycleRate('usd', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <Coins className="w-3 h-3" /> Rate Per File (PHP)
+                <Coins className="w-3 h-3" /> Cycle Rate (PHP)
               </label>
               <input 
                 type="number" step="0.01" 
                 className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-2.5 font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 transition-all"
-                value={phpRate} onChange={e => setPhpRate(parseFloat(e.target.value) || 0)}
+                value={selectedCycleStats?.rates.php || 0} 
+                onChange={e => updateSelectedCycleRate('php', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="bg-white/60 p-3 rounded-xl border border-indigo-100 flex justify-between items-center h-[46px]">
                <span className="text-[10px] font-bold text-indigo-400 uppercase">Implied FX:</span>
-               <span className="text-sm font-mono font-bold text-indigo-600">{(phpRate / (usdRate || 1)).toFixed(4)}</span>
+               <span className="text-sm font-mono font-bold text-indigo-600">
+                  {((selectedCycleStats?.rates.php || 0) / (selectedCycleStats?.rates.usd || 1)).toFixed(4)}
+               </span>
             </div>
          </div>
       )}
 
-      {/* Hero Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
@@ -275,7 +322,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         </div>
       </div>
 
-      {/* Cycle Detail Breakdown Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-page-enter">
          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -338,7 +384,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
          
          <div className="overflow-x-auto max-h-[450px] custom-scrollbar">
             <table className="w-full text-sm text-center">
-               <thead className="bg-slate-50/80 text-slate-500 font-bold text-[11px] uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
+               <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                      <th className="px-6 py-4">Manuscript ID</th>
                      <th className="px-6 py-4">Verification</th>
@@ -349,7 +395,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
-                  {!selectedCycleId || stats.cycleGroups[selectedCycleId]?.files.length === 0 ? (
+                  {!selectedCycleId || !stats.cycleGroups[selectedCycleId] ? (
                      <tr>
                         <td colSpan={6} className="px-6 py-24 text-center text-slate-400">
                            <div className="flex flex-col items-center gap-2">
@@ -361,6 +407,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                   ) : (
                      stats.cycleGroups[selectedCycleId].files.map((m) => {
                         const isBilled = m.status === Status.BILLED;
+                        const rates = cycleRates[selectedCycleId] || DEFAULT_RATES;
                         return (
                            <tr key={m.id} className={`transition-colors group ${isBilled ? 'hover:bg-slate-50/80' : 'bg-rose-50/20 hover:bg-rose-50/40'}`}>
                               <td className="px-6 py-4 font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{m.manuscriptId}</td>
@@ -383,14 +430,14 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                               </td>
                               <td className="px-6 py-4">
                                  <div className="flex flex-col items-center">
-                                    <span className={`text-sm font-bold ${isBilled ? 'text-emerald-600' : 'text-slate-400'}`}>₱{phpRate.toFixed(2)}</span>
-                                    <span className="text-[10px] text-slate-400 font-medium">${usdRate.toFixed(2)}</span>
+                                    <span className={`text-sm font-bold ${isBilled ? 'text-emerald-600' : 'text-slate-400'}`}>₱{rates.php.toFixed(2)}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium">${rates.usd.toFixed(2)}</span>
                                  </div>
                               </td>
                               <td className="px-6 py-4">
                                  {!isBilled && (
                                     <button 
-                                       onClick={() => onBulkUpdate([m.id], { status: Status.BILLED })}
+                                       onClick={() => onBulkUpdate([m.id], { status: Status.BILLED, billedDate: new Date().toISOString() })}
                                        className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
                                        title="Quick Mark as Billed"
                                     >
@@ -407,9 +454,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
          </div>
       </div>
 
-      {/* Cycle Performance & Earnings Graphs */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Output Volume Graph */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-6">
                 <div>
@@ -462,7 +507,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             </div>
         </div>
 
-        {/* Earnings Trend Graph */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-6">
                 <div>
@@ -492,7 +536,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                                             <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xl text-xs">
                                                 <p className="font-bold mb-2 text-slate-500 border-b border-slate-100 pb-1">{label}</p>
                                                 <p className="text-lg font-black text-emerald-600">₱{payload[0].value?.toLocaleString()}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">${(payload[0].value / phpRate * usdRate).toFixed(2)} USD</p>
                                             </div>
                                         );
                                     }
@@ -512,7 +555,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         </div>
       </div>
 
-      {/* Monthly Statistics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
@@ -616,6 +658,8 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             sortedCycles={stats.sortedCycles}
             initialCycleId={selectedCycleId}
             onBulkUpdate={onBulkUpdate}
+            cycleRates={cycleRates}
+            onUpdateRate={(id, rates) => setCycleRates(prev => ({ ...prev, [id]: rates }))}
          />
       )}
     </div>
