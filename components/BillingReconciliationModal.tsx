@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, ClipboardList, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, DollarSign } from 'lucide-react';
+import { X, ClipboardList, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, DollarSign, RefreshCcw } from 'lucide-react';
 
 interface BillingReconciliationModalProps {
   manuscripts: Manuscript[];
@@ -44,10 +44,10 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   };
 
   const billingAnalysis = useMemo(() => {
-    if (!selectedCycleId) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0 };
+    if (!selectedCycleId) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0, statusMismatches: 0 };
     
     const cycleData = sortedCycles.find(c => c.info.id === selectedCycleId);
-    if (!cycleData) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0 };
+    if (!cycleData) return { unbilled: [], extra: [], matched: [], foundCount: 0, totalInCycle: 0, statusMismatches: 0 };
 
     const rawInputLines = billingInput
       .split('\n')
@@ -59,6 +59,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
     // 1. Matched (In our records for this cycle AND in their list)
     const cycleFiles = cycleData.files;
     const matched = cycleFiles.filter(m => billedIdsSet.has(m.manuscriptId.toLowerCase()));
+    const statusMismatches = matched.filter(m => m.status === Status.WORKED).length;
 
     // 2. Missing from Billing (In our records for this cycle, but NOT in their list)
     const unbilled = cycleFiles.filter(m => !billedIdsSet.has(m.manuscriptId.toLowerCase()));
@@ -89,8 +90,9 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
        unbilled,
        extra: extraCategorized,
        matched,
-       foundCount: cycleFiles.length - unbilled.length,
-       totalInCycle: cycleFiles.length
+       foundCount: matched.length,
+       totalInCycle: cycleFiles.length,
+       statusMismatches
     };
   }, [billingInput, selectedCycleId, sortedCycles, manuscripts]);
 
@@ -121,7 +123,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
       return;
     }
 
-    if (window.confirm(`Mark ${idsToUpdate.length} matched files as 'Billed'? This updates their status in the database.`)) {
+    if (window.confirm(`Mark ${idsToUpdate.length} confirmed files as 'Billed'? This will sync your local database with the billing report.`)) {
       onBulkUpdate?.(idsToUpdate, { status: Status.BILLED });
     }
   };
@@ -138,7 +140,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800">Billing Reconciliation</h2>
-              <p className="text-sm text-slate-500 font-medium">Verify confirmed files and calculate expected salary in PHP.</p>
+              <p className="text-sm text-slate-500 font-medium">Sync confirmed files and calculate expected salary.</p>
             </div>
           </div>
           <button onClick={handleClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
@@ -176,7 +178,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                     </label>
                     <textarea 
                       className="w-full h-40 text-sm font-mono p-4 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 resize-none custom-scrollbar leading-relaxed"
-                      placeholder="Paste IDs here..."
+                      placeholder="Paste IDs from publisher report here..."
                       value={billingInput}
                       onChange={(e) => setBillingInput(e.target.value)}
                     />
@@ -231,9 +233,9 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
             <div className="lg:col-span-8 flex flex-col min-h-0">
                {!billingInput ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border-2 border-dashed border-slate-200 opacity-60">
-                     <Coins className="w-12 h-12 text-slate-300 mb-4" />
-                     <p className="text-slate-500 font-medium">Ready to Calculate</p>
-                     <p className="text-xs text-slate-400 mt-1 max-w-xs">Paste your billed IDs and adjust rates to see your PHP salary projection.</p>
+                     <RefreshCcw className="w-12 h-12 text-slate-300 mb-4" />
+                     <p className="text-slate-500 font-medium">Waiting for Input</p>
+                     <p className="text-xs text-slate-400 mt-1 max-w-xs">Paste your billed IDs to identify status mismatches and calculate your expected salary.</p>
                   </div>
                ) : (
                   <div className="flex flex-col h-full space-y-6 animate-page-enter">
@@ -267,9 +269,9 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                               <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Matched</p>
                               <p className="text-xl font-bold text-indigo-600">{billingAnalysis.foundCount}</p>
                            </div>
-                           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col justify-center">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Missing</p>
-                              <p className="text-xl font-bold text-rose-600">{billingAnalysis.unbilled.length}</p>
+                           <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex-1 flex flex-col justify-center bg-rose-50/20">
+                              <p className="text-[10px] font-bold text-rose-400 uppercase mb-0.5">Status Mismatch</p>
+                              <p className="text-xl font-bold text-rose-600">{billingAnalysis.statusMismatches}</p>
                            </div>
                         </div>
                      </div>
@@ -310,27 +312,37 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                    <div className="flex justify-between items-center px-1">
                                       <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                          <CheckCircle className="w-4 h-4 text-emerald-500" />
-                                         <span>Successfully matched with your records.</span>
+                                         <span>Successfully matched {billingAnalysis.foundCount} items.</span>
+                                         {billingAnalysis.statusMismatches > 0 && (
+                                            <span className="text-rose-600 font-bold ml-1 flex items-center gap-1">
+                                               <AlertTriangle className="w-3.5 h-3.5" /> 
+                                               {billingAnalysis.statusMismatches} need status update
+                                            </span>
+                                         )}
                                       </div>
-                                      <button 
-                                         onClick={handleMarkAsBilled}
-                                         className="text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 shadow-md transition-all active:scale-95"
-                                      >
-                                         <FileCheck className="w-3.5 h-3.5" />
-                                         Mark as Billed
-                                      </button>
+                                      {billingAnalysis.statusMismatches > 0 && (
+                                          <button 
+                                             onClick={handleMarkAsBilled}
+                                             className="text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg flex items-center gap-2 bg-rose-600 text-white hover:bg-rose-700 shadow-md transition-all active:scale-95"
+                                          >
+                                             <RefreshCcw className="w-3.5 h-3.5" />
+                                             Sync Statuses ({billingAnalysis.statusMismatches})
+                                          </button>
+                                      )}
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                       {billingAnalysis.matched.map(m => (
-                                         <div key={m.id} className={`p-3 border rounded-xl transition-all ${m.status === Status.BILLED ? 'bg-indigo-50/30 border-indigo-100 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                         <div key={m.id} className={`p-3 border rounded-xl transition-all ${m.status === Status.BILLED ? 'bg-indigo-50/30 border-indigo-100 opacity-60' : 'bg-rose-50 border-rose-200 shadow-sm'}`}>
                                             <div className="flex justify-between items-start">
                                                <div>
                                                   <p className="font-bold text-slate-800 text-sm">{m.manuscriptId}</p>
                                                   <p className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-tighter">{m.journalCode}</p>
                                                </div>
                                                <div className="text-right flex flex-col items-end">
-                                                  <p className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${m.status === Status.BILLED ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.status}</p>
-                                                  <p className="text-[11px] text-emerald-600 mt-1.5 font-bold font-mono">+₱{phpRatePerFile.toFixed(2)}</p>
+                                                  <p className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${m.status === Status.BILLED ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700 animate-pulse'}`}>
+                                                     {m.status === Status.BILLED ? 'BILLED' : 'WORKED'}
+                                                  </p>
+                                                  <p className={`text-[11px] mt-1.5 font-bold font-mono ${m.status === Status.BILLED ? 'text-emerald-600' : 'text-rose-600'}`}>+₱{phpRatePerFile.toFixed(2)}</p>
                                                </div>
                                             </div>
                                          </div>
@@ -349,7 +361,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                     <div className="flex justify-between items-center px-1">
                                        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                           <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                          <span>These files are in our records but <strong>not</strong> in the billed list. Unclaimed: <strong>₱{(billingAnalysis.unbilled.length * phpRatePerFile).toFixed(2)}</strong></span>
+                                          <span>In our records but <strong>not</strong> in the list. Unclaimed: <strong>₱{(billingAnalysis.unbilled.length * phpRatePerFile).toFixed(2)}</strong></span>
                                        </div>
                                        <button 
                                           onClick={handleCopyUnbilled}
@@ -358,7 +370,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                           }`}
                                        >
                                           {copyFeedback ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                                          Copy List
+                                          Copy Missing List
                                        </button>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -390,7 +402,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                  <div className="space-y-4">
                                     <div className="flex items-center gap-2 text-xs text-slate-500 px-1 font-medium">
                                        <HelpCircle className="w-4 h-4 text-amber-500" />
-                                       <span>These IDs were found in the billed list but are <strong>not</strong> in the current cycle's database.</span>
+                                       <span>IDs found in the list but <strong>not</strong> in the current cycle's database.</span>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                        {billingAnalysis.extra.map((item, idx) => (

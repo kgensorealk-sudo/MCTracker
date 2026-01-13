@@ -41,7 +41,8 @@ const App: React.FC = () => {
   const [isBulkReview, setIsBulkReview] = useState(false);
 
   const enterOfflineMode = () => {
-    console.log('App running in Offline Mode (LocalStorage)');
+    if (isOffline) return; 
+    console.warn('App running in Offline Mode (LocalStorage)');
     setIsOffline(true);
     setSession({
       access_token: 'offline_token',
@@ -78,7 +79,7 @@ const App: React.FC = () => {
         }
         setLoading(false);
       } catch (err: any) {
-        console.error("Supabase auth error:", err);
+        console.error("Auth initialization failed:", err);
         if (err.message?.includes('fetch') || err.name === 'TypeError') {
           enterOfflineMode();
         } else {
@@ -93,6 +94,7 @@ const App: React.FC = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) setSession(session);
+      else if (!isOffline) setSession(null);
     });
 
     return () => subscription.unsubscribe();
@@ -103,7 +105,7 @@ const App: React.FC = () => {
     if (session) {
       loadData();
     }
-  }, [session]);
+  }, [session, isOffline]);
 
   const loadData = async () => {
     setDataLoading(true);
@@ -120,8 +122,7 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Error loading data:", error);
-      // If we encounter a fetch error during normal data loading, try one last local fallback
-      if (error.message?.includes('fetch') && !isOffline) {
+      if (error.message?.includes('fetch')) {
         enterOfflineMode();
       }
     } finally {
@@ -152,36 +153,55 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Error saving:", error);
-      alert(`Failed to save record: ${error.message || 'Unknown error'}`);
+      if (error.message?.includes('fetch')) {
+        enterOfflineMode();
+        handleSave(manuscript);
+      } else {
+        alert(`Failed to save record: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setDataLoading(false);
     }
   };
 
   const handleQuickUpdate = async (id: string, updates: Partial<Manuscript>) => {
-    setManuscripts(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
     const original = manuscripts.find(m => m.id === id);
     if (!original) return;
 
+    const now = new Date().toISOString();
     const updatedManuscript = { 
       ...original, 
       ...updates, 
-      dateUpdated: new Date().toISOString() 
+      dateUpdated: now 
     };
 
     if (updates.status && updates.status !== original.status) {
-      updatedManuscript.dateStatusChanged = new Date().toISOString();
-      if ((updatedManuscript.status === Status.WORKED || updatedManuscript.status === Status.BILLED) && !updatedManuscript.completedDate) {
-        updatedManuscript.completedDate = new Date().toISOString();
+      // Logic fix: If moving from WORKED to BILLED, do not update dateStatusChanged.
+      // This preserves the work date so the file stays in its original cycle.
+      const isReconciling = updates.status === Status.BILLED && original.status === Status.WORKED;
+      
+      if (!isReconciling) {
+        updatedManuscript.dateStatusChanged = now;
+      }
+
+      // Only set completedDate if it doesn't exist. Never overwrite.
+      if ((updatedManuscript.status === Status.WORKED || updatedManuscript.status === Status.BILLED) && !original.completedDate) {
+        updatedManuscript.completedDate = now;
       }
     }
+
+    setManuscripts(prev => prev.map(m => m.id === id ? updatedManuscript : m));
 
     try {
       await dataService.updateManuscript(updatedManuscript, isOffline);
     } catch (error: any) {
       console.error("Quick update failed:", error);
-      alert(`Failed to update record: ${error.message || 'Unknown error'}`);
-      setManuscripts(prev => prev.map(m => m.id === id ? original : m));
+      if (error.message?.includes('fetch')) {
+        enterOfflineMode();
+      } else {
+        alert(`Failed to update record: ${error.message || 'Unknown error'}`);
+        setManuscripts(prev => prev.map(m => m.id === id ? original : m));
+      }
     }
   };
 
@@ -190,22 +210,40 @@ const App: React.FC = () => {
     setDataLoading(true);
 
     const now = new Date().toISOString();
-    const finalUpdates: any = { ...updates, dateStatusChanged: now };
+    
+    setManuscripts(prev => prev.map(m => {
+      if (!ids.includes(m.id)) return m;
+      
+      const itemUpdates: any = { 
+        ...updates, 
+        dateUpdated: now 
+      };
+      
+      if (updates.status && updates.status !== m.status) {
+        const isReconciling = updates.status === Status.BILLED && m.status === Status.WORKED;
+        if (!isReconciling) {
+          itemUpdates.dateStatusChanged = now;
+        }
 
-    if (updates.status === Status.WORKED || updates.status === Status.BILLED) {
-      finalUpdates.completedDate = now;
-    }
+        // Maintain completedDate integrity
+        if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
+          itemUpdates.completedDate = now;
+        }
+      }
 
-    setManuscripts(prev => prev.map(m => 
-      ids.includes(m.id) ? { ...m, ...finalUpdates, dateUpdated: now } : m
-    ));
+      return { ...m, ...itemUpdates };
+    }));
 
     try {
-      await dataService.updateManuscripts(ids, finalUpdates, isOffline);
+      await dataService.updateManuscripts(ids, updates, isOffline);
     } catch (error: any) {
       console.error("Bulk update failed:", error);
-      alert(`Failed to update multiple records: ${error.message || 'Unknown error'}`);
-      loadData(); 
+      if (error.message?.includes('fetch')) {
+        enterOfflineMode();
+      } else {
+        alert(`Failed to update multiple records: ${error.message || 'Unknown error'}`);
+        loadData(); 
+      }
     } finally {
       setDataLoading(false);
     }
@@ -227,7 +265,12 @@ const App: React.FC = () => {
         setManuscripts(prev => prev.filter(m => m.id !== id));
       } catch (error: any) {
         console.error("Error deleting:", error);
-        alert(`Failed to delete record: ${error.message || 'Unknown error'}`);
+        if (error.message?.includes('fetch')) {
+          enterOfflineMode();
+          handleDelete(id);
+        } else {
+          alert(`Failed to delete record: ${error.message || 'Unknown error'}`);
+        }
       } finally {
         setDataLoading(false);
       }
@@ -247,8 +290,12 @@ const App: React.FC = () => {
       setView('list'); 
     } catch (error: any) {
       console.error("Bulk import failed:", error);
-      alert(`Some items failed to import: ${error.message || 'Error'}`);
-      loadData();
+      if (error.message?.includes('fetch')) {
+        enterOfflineMode();
+        loadData();
+      } else {
+        alert(`Some items failed to import: ${error.message || 'Error'}`);
+      }
     } finally {
       setDataLoading(false);
     }
@@ -256,14 +303,18 @@ const App: React.FC = () => {
 
   const handleUpdateTarget = (target: number) => {
     setTargetPerCycle(target);
-    dataService.updateTarget(target, isOffline).catch(console.error);
+    dataService.updateTarget(target, isOffline).catch(err => {
+      if (err.message?.includes('fetch')) enterOfflineMode();
+    });
   };
 
   const handleUpdateSchedule = (schedule: UserSchedule) => {
     setUserSchedule(schedule);
     dataService.updateSchedule(schedule, isOffline).catch((err: any) => {
       console.error("Schedule sync failed:", err);
-      if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column') || err.message.includes('relation'))) {
+      if (err.message?.includes('fetch')) {
+        enterOfflineMode();
+      } else if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column'))) {
          alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
       }
     });
@@ -275,7 +326,8 @@ const App: React.FC = () => {
     try {
       await dataService.updateManuscripts(ids, { dateEmailed: now }, isOffline);
     } catch (error: any) {
-      console.error("Failed to mark reported: " + (error.message || "Unknown persistence error"));
+      console.error("Failed to mark reported:", error);
+      if (error.message?.includes('fetch')) enterOfflineMode();
     }
   };
 
@@ -359,7 +411,7 @@ const App: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
             {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
             {isOffline && (
-              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2">
+              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2 animate-pulse">
                  <WifiOff className="w-3 h-3" /> Offline Mode
               </div>
             )}

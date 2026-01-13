@@ -11,10 +11,8 @@ const mapToManuscript = (row: any): Manuscript => ({
   priority: row.priority,
   dateReceived: row.date_received,
   dueDate: row.due_date,
-  // Fix: renamed completed_date to completedDate to match Manuscript interface
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
-  // Fix: renamed dateStatus_changed to dateStatusChanged to match Manuscript interface
   dateStatusChanged: row.date_status_changed,
   queryReason: row.query_reason, 
   dateQueried: row.date_queried,
@@ -45,6 +43,17 @@ const getLocalSettings = () => {
   }
 };
 
+// Helper to catch network errors during user check
+const getSafeUser = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch (err) {
+    console.warn("User fetch failed (network issue):", err);
+    return null;
+  }
+};
+
 export const dataService = {
   // --- Manuscripts ---
   
@@ -54,7 +63,7 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSafeUser();
       if (!user) return getLocalManuscripts();
 
       const { data, error } = await supabase
@@ -81,8 +90,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.createManuscript(m, true);
 
       const payload: any = {
           user_id: user.id,
@@ -124,8 +133,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.updateManuscript(m, true);
 
       const payload: any = {
           manuscript_id: m.manuscriptId,
@@ -171,8 +180,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.updateManuscripts(ids, updates, true);
 
       const dbUpdates: any = {
          date_updated: new Date().toISOString()
@@ -207,8 +216,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.deleteManuscript(id, true);
 
       const { error } = await supabase
         .from('manuscripts')
@@ -229,14 +238,14 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSafeUser();
       if (!user) return getLocalSettings();
 
       const { data, error } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', user.id)
-        .maybeSingle(); // maybeSingle handles 0 rows gracefully
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       if (!data) return getLocalSettings();
@@ -262,8 +271,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.updateTarget(target, true);
 
       const { error } = await supabase
         .from('user_settings')
@@ -284,8 +293,8 @@ export const dataService = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      const user = await getSafeUser();
+      if (!user) return this.updateSchedule(schedule, true);
 
       const { error } = await supabase
         .from('user_settings')

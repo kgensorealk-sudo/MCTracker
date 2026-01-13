@@ -1,8 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { Trophy, TrendingUp, Clock, FileText, History, Search, Zap, LayoutGrid, ClipboardList, FileSearch, AlertCircle, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { Trophy, TrendingUp, Clock, FileText, History, Search, Zap, LayoutGrid, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, ArrowUpRight, AlertTriangle, CheckCircle, FileCheck } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
@@ -21,6 +21,16 @@ interface CycleInfo {
 const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate }) => {
   const [selectedCycleId, setSelectedCycleId] = useState<string>('');
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
+  const [showRateSettings, setShowRateSettings] = useState(false);
+  
+  // Rate state matching BillingReconciliationModal for consistency
+  const [usdRate, setUsdRate] = useState<number>(() => parseFloat(localStorage.getItem('billing_usd_rate') || '1.19'));
+  const [phpRate, setPhpRate] = useState<number>(() => parseFloat(localStorage.getItem('billing_php_rate') || '70.41'));
+
+  useEffect(() => {
+    localStorage.setItem('billing_usd_rate', usdRate.toString());
+    localStorage.setItem('billing_php_rate', phpRate.toString());
+  }, [usdRate, phpRate]);
 
   // Helper: Determine which Cycle a date belongs to
   const getCycleForDate = (dateStr: string): CycleInfo => {
@@ -60,49 +70,36 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
   const stats = useMemo(() => {
     const months: Record<string, { count: number; totalTat: number; countWithTat: number }> = {};
-    const dailyStats: Record<string, { worked: number; queried: number }> = {};
-    const dailyUniqueFiles: Record<string, Set<string>> = {};
     const cycleGroups: Record<string, { info: CycleInfo; files: Manuscript[] }> = {};
-    const workDates = new Set<string>();
     let totalWorked = 0;
     
-    // Helper to get Year-Month key
     const getMonthKey = (dateStr: string) => {
       try {
         const d = new Date(dateStr);
         if (isNaN(d.getTime())) return null;
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     };
 
-    // Helper to format key to Label
     const formatLabel = (key: string) => {
       const [year, month] = key.split('-');
       const d = new Date(parseInt(year), parseInt(month) - 1);
       return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     };
 
-    const addToFileSet = (dateStr: string, id: string) => {
-      const d = dateStr.split('T')[0];
-      if (!dailyUniqueFiles[d]) dailyUniqueFiles[d] = new Set();
-      dailyUniqueFiles[d].add(id);
-    };
-
     manuscripts.forEach(m => {
-      // 1. Monthly Stats (Worked and Billed items count as "Worked" for history)
       if (m.status === Status.WORKED || m.status === Status.BILLED) {
+        // Deterministic Date Selection: 
+        // 1. completedDate is the most accurate work timestamp.
+        // 2. dateStatusChanged is used for fresh WORKED items.
+        // 3. dateUpdated/Received as safety fallbacks.
         const workDate = m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived;
         const monthKey = getMonthKey(workDate);
         
         if (monthKey) {
-            if (!months[monthKey]) {
-              months[monthKey] = { count: 0, totalTat: 0, countWithTat: 0 };
-            }
+            if (!months[monthKey]) months[monthKey] = { count: 0, totalTat: 0, countWithTat: 0 };
             months[monthKey].count += 1;
             totalWorked++;
-
             const start = new Date(m.dateReceived).getTime();
             const end = new Date(workDate).getTime();
             if (!isNaN(start) && !isNaN(end)) {
@@ -112,39 +109,9 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             }
         }
 
-        // 2. Cycle Grouping
         const cycle = getCycleForDate(workDate);
-        if (!cycleGroups[cycle.id]) {
-          cycleGroups[cycle.id] = { info: cycle, files: [] };
-        }
+        if (!cycleGroups[cycle.id]) cycleGroups[cycle.id] = { info: cycle, files: [] };
         cycleGroups[cycle.id].files.push(m);
-      }
-
-      // 3. Daily Stats Tracking
-      if (m.status === Status.WORKED || m.status === Status.BILLED) {
-         const raw = m.completedDate || m.dateStatusChanged || m.dateUpdated;
-         if (raw) {
-             const d = raw.split('T')[0];
-             if (!dailyStats[d]) dailyStats[d] = { worked: 0, queried: 0 };
-             dailyStats[d].worked++;
-             workDates.add(d);
-             addToFileSet(raw, m.id);
-         }
-      }
-      
-      if (m.dateQueried) {
-         const dStr = m.dateQueried.split('T')[0];
-         if (!dailyStats[dStr]) dailyStats[dStr] = { worked: 0, queried: 0 };
-         dailyStats[dStr].queried++;
-         addToFileSet(m.dateQueried, m.id);
-      } else if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
-         const raw = m.dateStatusChanged || m.dateUpdated;
-         if (raw) {
-            const dStr = raw.split('T')[0];
-            if (!dailyStats[dStr]) dailyStats[dStr] = { worked: 0, queried: 0 };
-            dailyStats[dStr].queried++;
-            addToFileSet(raw, m.id);
-         }
       }
     });
 
@@ -157,78 +124,47 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       }))
       .sort((a, b) => a.key.localeCompare(b.key));
 
-    const overallTat = chartData.reduce((acc, curr) => acc + (curr.avgTat * curr.count), 0) / Math.max(1, totalWorked);
-
-    // Calculate Top Productive Cycle
-    const sortedCyclesByCount = Object.values(cycleGroups)
-      .map(group => ({
-        label: group.info.label,
-        count: group.files.length,
-        id: group.info.id
-      }))
-      .sort((a, b) => b.count - a.count);
-    
-    const topCycle = sortedCyclesByCount[0] || { label: 'N/A', count: 0, id: '' };
-
-    // Daily Records
-    let maxWorkedDay = { date: 'N/A', count: 0 };
-    let maxActivityDay = { date: 'N/A', count: 0 };
-    Object.entries(dailyStats).forEach(([date, counts]) => {
-        if (counts.worked > maxWorkedDay.count) maxWorkedDay = { date, count: counts.worked };
-    });
-    Object.entries(dailyUniqueFiles).forEach(([date, fileSet]) => {
-        if (fileSet.size > maxActivityDay.count) maxActivityDay = { date, count: fileSet.size };
-    });
-
-    // Streak
-    const sortedDates = Array.from(workDates).sort();
-    let maxStreak = 0;
-    let currentStreak = 0;
-    let prevDate: Date | null = null;
-    sortedDates.forEach(dateStr => {
-        const currentDate = new Date(dateStr);
-        currentDate.setHours(0,0,0,0);
-        if (!prevDate) {
-            currentStreak = 1;
-        } else {
-            const diffTime = Math.abs(currentDate.getTime() - prevDate.getTime());
-            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)); 
-            if (diffDays === 1) currentStreak++;
-            else currentStreak = 1;
-        }
-        if (currentStreak > maxStreak) maxStreak = currentStreak;
-        prevDate = currentDate;
-    });
-
-    // Sorted Cycles for dropdown
     const sortedCycles = Object.values(cycleGroups).sort((a, b) => b.info.id.localeCompare(a.info.id));
 
-    // Cycle performance data for the new graph
     const cycleChartData = [...sortedCycles].reverse().map(c => ({
       name: c.info.label.split(' (')[0],
-      count: c.files.length
+      count: c.files.length,
+      earnings: c.files.length * phpRate,
+      usd: c.files.length * usdRate
     }));
+
+    const totalEarningsPhp = totalWorked * phpRate;
+    const totalEarningsUsd = totalWorked * usdRate;
 
     return {
       chartData,
-      topCycle,
       totalWorked,
-      overallTat: overallTat.toFixed(1),
-      maxStreak,
-      records: {
-        bestWorked: { ...maxWorkedDay, label: maxWorkedDay.date !== 'N/A' ? new Date(maxWorkedDay.date).toLocaleDateString() : 'N/A' },
-        peakActivity: { ...maxActivityDay, label: maxActivityDay.date !== 'N/A' ? new Date(maxActivityDay.date).toLocaleDateString() : 'N/A' }
-      },
+      totalEarningsPhp,
+      totalEarningsUsd,
       cycleGroups,
       sortedCycles,
       cycleChartData
     };
-  }, [manuscripts]);
+  }, [manuscripts, phpRate, usdRate]);
 
-  // Set default cycle on load
   if (stats.sortedCycles.length > 0 && !selectedCycleId) {
      setSelectedCycleId(stats.sortedCycles[0].info.id);
   }
+
+  const selectedCycleStats = useMemo(() => {
+    if (!selectedCycleId || !stats.cycleGroups[selectedCycleId]) return null;
+    const files = stats.cycleGroups[selectedCycleId].files;
+    const billedCount = files.filter(f => f.status === Status.BILLED).length;
+    const workedCount = files.filter(f => f.status === Status.WORKED).length;
+    return {
+        total: files.length,
+        billedCount,
+        workedCount,
+        percentBilled: Math.round((billedCount / files.length) * 100),
+        pendingPhp: workedCount * phpRate,
+        billedPhp: billedCount * phpRate
+    };
+  }, [selectedCycleId, stats.cycleGroups, phpRate]);
 
   return (
     <div className="space-y-8 animate-fade-in-up pb-12">
@@ -240,32 +176,70 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             <History className="w-8 h-8 text-indigo-600" />
             History & Reports
           </h2>
-          <p className="text-slate-500 text-sm">Long-term productivity trends and detailed cycle analysis.</p>
+          <p className="text-slate-500 text-sm">Productivity trends, cycle analysis, and earnings history.</p>
         </div>
-        <button 
-           onClick={() => setIsReconModalOpen(true)}
-           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-        >
-           <ClipboardList className="w-4 h-4" />
-           Reconcile Billing
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+             onClick={() => setShowRateSettings(!showRateSettings)}
+             className={`p-2.5 rounded-xl border transition-all ${showRateSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+             title="Earnings Rates"
+          >
+             <Settings2 className="w-5 h-5" />
+          </button>
+          <button 
+             onClick={() => setIsReconModalOpen(true)}
+             className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+          >
+             <ClipboardList className="w-4 h-4" />
+             Reconcile Billing
+          </button>
+        </div>
       </div>
+
+      {/* Rate Configuration Popover */}
+      {showRateSettings && (
+         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-fade-in-up grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+            <div>
+              <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <DollarSign className="w-3 h-3" /> Rate Per File (USD)
+              </label>
+              <input 
+                type="number" step="0.01" 
+                className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-2.5 font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 transition-all"
+                value={usdRate} onChange={e => setUsdRate(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <Coins className="w-3 h-3" /> Rate Per File (PHP)
+              </label>
+              <input 
+                type="number" step="0.01" 
+                className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-2.5 font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 transition-all"
+                value={phpRate} onChange={e => setPhpRate(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div className="bg-white/60 p-3 rounded-xl border border-indigo-100 flex justify-between items-center h-[46px]">
+               <span className="text-[10px] font-bold text-indigo-400 uppercase">Implied FX:</span>
+               <span className="text-sm font-mono font-bold text-indigo-600">{(phpRate / (usdRate || 1)).toFixed(4)}</span>
+            </div>
+         </div>
+      )}
 
       {/* Hero Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
-             <Trophy className="w-24 h-24" />
+             <Wallet className="w-24 h-24" />
           </div>
           <div className="relative z-10">
-            <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider mb-3">Top Productive Cycle</p>
-            <div className="flex items-end gap-2">
-              <h3 className="text-4xl font-bold">{stats.topCycle.count}</h3>
-              <span className="text-indigo-200 text-sm mb-1 font-medium">files completed</span>
+            <p className="text-emerald-100 font-bold uppercase text-xs tracking-wider mb-3">Lifetime Earnings (Est.)</p>
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-4xl font-black tracking-tight">₱{stats.totalEarningsPhp.toLocaleString(undefined, { maximumFractionDigits: 2 })}</h3>
             </div>
-            <p className="mt-3 text-sm font-semibold bg-white/20 inline-block px-3 py-1 rounded-lg backdrop-blur-sm">
-              {stats.topCycle.label}
-            </p>
+            <div className="mt-4 flex items-center gap-2 text-sm font-bold text-emerald-100 bg-black/10 w-fit px-3 py-1 rounded-lg backdrop-blur-sm border border-white/10">
+               <DollarSign className="w-3.5 h-3.5" /> {stats.totalEarningsUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
+            </div>
           </div>
         </div>
 
@@ -275,140 +249,103 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                  <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Lifetime Worked</p>
                  <h3 className="text-3xl font-bold text-slate-800 mt-2">{stats.totalWorked}</h3>
               </div>
-              <div className="p-3 bg-emerald-50 rounded-xl group-hover:bg-emerald-100 transition-colors">
-                 <FileText className="w-6 h-6 text-emerald-600" />
+              <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors">
+                 <FileText className="w-6 h-6 text-indigo-600" />
               </div>
            </div>
            <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
-              <span className="text-sm text-slate-500 font-medium">Avg Turnaround:</span>
-              <span className="text-sm font-bold text-slate-700 flex items-center">
-                 <Clock className="w-4 h-4 mr-1.5 text-slate-400" /> {stats.overallTat} days
+              <span className="text-sm text-slate-500 font-medium">Monthly Potential:</span>
+              <span className="text-sm font-bold text-slate-700 ml-auto flex items-center gap-1 text-emerald-600">
+                 <ArrowUpRight className="w-4 h-4" /> ₱{(stats.totalEarningsPhp / Math.max(1, stats.chartData.length)).toFixed(0)}/mo
               </span>
            </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow hover:border-indigo-200 group">
-             <div className="p-4 bg-indigo-50 rounded-full shrink-0 group-hover:bg-indigo-100 transition-colors">
-                <LayoutGrid className="w-8 h-8 text-indigo-600" />
-             </div>
-             <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Peak Activity (1 Day)</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                   <h3 className="text-2xl font-bold text-slate-800">{stats.records.peakActivity.count} files</h3>
-                </div>
-                <p className="text-xs text-slate-500 font-medium truncate mt-1">
-                    {stats.records.peakActivity.label}
-                </p>
-             </div>
-          </div>
-      </div>
-
-      {/* Cycle Performance Graph */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+             <div className="flex justify-between items-start mb-4">
               <div>
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-indigo-500" /> Cycle Output History
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">Completion volume per individual billing cycle (11th-25th & 26th-10th)</p>
+                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Productivity Pace</p>
+                 <h3 className="text-3xl font-bold text-slate-800 mt-2">{stats.totalWorked > 0 ? (stats.totalWorked / Math.max(1, stats.sortedCycles.length)).toFixed(1) : 0}</h3>
               </div>
-              <div className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg uppercase tracking-wider">
-                  Performance Trend
+              <div className="p-3 bg-amber-50 rounded-xl group-hover:bg-amber-100 transition-colors">
+                 <TrendingUp className="w-6 h-6 text-amber-600" />
               </div>
-          </div>
-          <div className="h-[300px] w-full">
-              {stats.cycleChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                          <defs>
-                              <linearGradient id="cycleGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#4f46e5" stopOpacity={1} />
-                                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
-                              </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis 
-                              dataKey="name" 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                              interval={0}
-                              angle={-10}
-                              textAnchor="end"
-                              height={50}
-                          />
-                          <YAxis 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                          />
-                          <Tooltip 
-                              cursor={{ fill: '#f8fafc' }}
-                              content={({ active, payload, label }) => {
-                                  if (active && payload && payload.length) {
-                                      return (
-                                          <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs">
-                                              <p className="font-bold mb-1 opacity-70">{label}</p>
-                                              <p className="text-base">Files: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
-                                          </div>
-                                      );
-                                  }
-                                  return null;
-                              }}
-                          />
-                          <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={60} isAnimationActive={false}>
-                            {stats.cycleChartData.map((_, index) => (
-                                <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
-                            ))}
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-              ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                      <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
-                      <p className="text-sm font-medium">Insufficient cycle history to display graph.</p>
-                  </div>
-              )}
-          </div>
+           </div>
+           <div className="text-xs text-slate-400 font-medium">Average files per billing cycle</div>
+        </div>
       </div>
 
-      {/* Cycle History Table */}
+      {/* Cycle Detail Breakdown Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-page-enter">
-         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-3">
                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
                   <FileSearch className="w-5 h-5" />
                </div>
                <div>
                   <h3 className="font-bold text-slate-800">Cycle Worked Details</h3>
-                  <p className="text-xs text-slate-500 font-medium">Detailed breakdown of files handled per cycle</p>
+                  <p className="text-xs text-slate-500 font-medium">Files handled and billing verification status</p>
                </div>
             </div>
             
-            <div className="flex items-center gap-3">
-               <label className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:block">Filter Cycle:</label>
-               <select 
-                  className="text-sm border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 py-2 px-3 font-semibold text-slate-700 min-w-[200px]"
-                  value={selectedCycleId}
-                  onChange={(e) => setSelectedCycleId(e.target.value)}
-               >
-                  {stats.sortedCycles.map(c => (
-                     <option key={c.info.id} value={c.info.id}>{c.info.label} ({c.files.length} files)</option>
-                  ))}
-               </select>
+            <div className="flex flex-wrap items-center gap-4">
+               {selectedCycleStats && selectedCycleStats.workedCount > 0 && (
+                  <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl animate-pulse">
+                     <AlertTriangle className="w-4 h-4 text-rose-500" />
+                     <span className="text-xs font-bold text-rose-700">{selectedCycleStats.workedCount} items pending billing</span>
+                  </div>
+               )}
+               <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:block">Filter Cycle:</label>
+                  <select 
+                     className="text-sm border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 py-2 px-3 font-semibold text-slate-700 min-w-[200px]"
+                     value={selectedCycleId}
+                     onChange={(e) => setSelectedCycleId(e.target.value)}
+                  >
+                     {stats.sortedCycles.map(c => (
+                        <option key={c.info.id} value={c.info.id}>{c.info.label} ({c.files.length} files)</option>
+                     ))}
+                  </select>
+               </div>
             </div>
          </div>
+
+         {selectedCycleStats && (
+            <div className="px-6 py-4 bg-white border-b border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-4">
+               <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Verification Progress</p>
+                  <div className="flex items-center gap-2">
+                     <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 transition-all duration-700" style={{ width: `${selectedCycleStats.percentBilled}%` }}></div>
+                     </div>
+                     <span className="text-xs font-bold text-slate-700">{selectedCycleStats.percentBilled}%</span>
+                  </div>
+               </div>
+               <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Confirmed Payout</p>
+                  <p className="text-sm font-bold text-emerald-600">₱{selectedCycleStats.billedPhp.toLocaleString()}</p>
+               </div>
+               <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Awaiting Billing</p>
+                  <p className="text-sm font-bold text-rose-600">₱{selectedCycleStats.pendingPhp.toLocaleString()}</p>
+               </div>
+               <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Cycle Total (Est.)</p>
+                  <p className="text-sm font-black text-slate-800">₱{(selectedCycleStats.billedPhp + selectedCycleStats.pendingPhp).toLocaleString()}</p>
+               </div>
+            </div>
+         )}
          
-         <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+         <div className="overflow-x-auto max-h-[450px] custom-scrollbar">
             <table className="w-full text-sm text-center">
                <thead className="bg-slate-50/80 text-slate-500 font-bold text-[11px] uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                      <th className="px-6 py-4">Manuscript ID</th>
-                     <th className="px-6 py-4">Status</th>
+                     <th className="px-6 py-4">Verification</th>
                      <th className="px-6 py-4">Journal</th>
-                     <th className="px-6 py-4">Received</th>
                      <th className="px-6 py-4">Completed</th>
-                     <th className="px-6 py-4">Performance</th>
+                     <th className="px-6 py-4">Est. Payout</th>
+                     <th className="px-6 py-4">Action</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -423,35 +360,43 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                      </tr>
                   ) : (
                      stats.cycleGroups[selectedCycleId].files.map((m) => {
-                        const start = new Date(m.dateReceived).getTime();
-                        const end = new Date(m.completedDate || m.dateStatusChanged || '').getTime();
-                        const tat = Math.max(0, (end - start) / (1000 * 3600 * 24)).toFixed(1);
-                        const isFast = parseFloat(tat) <= 1;
-
+                        const isBilled = m.status === Status.BILLED;
                         return (
-                           <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
+                           <tr key={m.id} className={`transition-colors group ${isBilled ? 'hover:bg-slate-50/80' : 'bg-rose-50/20 hover:bg-rose-50/40'}`}>
                               <td className="px-6 py-4 font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{m.manuscriptId}</td>
                               <td className="px-6 py-4 text-center">
-                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-tight ${
-                                   m.status === Status.BILLED ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
-                                 }`}>
-                                   {m.status === Status.BILLED ? 'Billed' : 'Worked'}
-                                 </span>
+                                 {isBilled ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 uppercase tracking-tight">
+                                       <CheckCircle className="w-3 h-3" /> Billed
+                                    </span>
+                                 ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700 uppercase tracking-tight animate-pulse">
+                                       <AlertTriangle className="w-3 h-3" /> Worked
+                                    </span>
+                                 )}
                               </td>
                               <td className="px-6 py-4 text-slate-500 font-mono text-[11px] uppercase tracking-tighter">{m.journalCode}</td>
-                              <td className="px-6 py-4 text-slate-600 font-medium">{new Date(m.dateReceived).toLocaleDateString()}</td>
                               <td className="px-6 py-4">
-                                 <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+                                 <span className="text-slate-600 font-bold bg-slate-50 px-2 py-0.5 rounded">
                                     {new Date(m.completedDate || m.dateStatusChanged || '').toLocaleDateString()}
                                  </span>
                               </td>
                               <td className="px-6 py-4">
-                                 <div className="flex justify-center items-center gap-2">
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isFast ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
-                                       {tat}d TAT
-                                    </span>
-                                    {isFast && <Zap className="w-3 h-3 text-indigo-400 fill-indigo-400" />}
+                                 <div className="flex flex-col items-center">
+                                    <span className={`text-sm font-bold ${isBilled ? 'text-emerald-600' : 'text-slate-400'}`}>₱{phpRate.toFixed(2)}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium">${usdRate.toFixed(2)}</span>
                                  </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                 {!isBilled && (
+                                    <button 
+                                       onClick={() => onBulkUpdate([m.id], { status: Status.BILLED })}
+                                       className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
+                                       title="Quick Mark as Billed"
+                                    >
+                                       <FileCheck className="w-4 h-4" />
+                                    </button>
+                                 )}
                               </td>
                            </tr>
                         );
@@ -462,21 +407,126 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
          </div>
       </div>
 
+      {/* Cycle Performance & Earnings Graphs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Output Volume Graph */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-indigo-500" /> Cycle Volume
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Number of files per cycle</p>
+                </div>
+            </div>
+            <div className="h-[280px] w-full">
+                {stats.cycleChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="cycleGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#4f46e5" stopOpacity={1} />
+                                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} height={40} angle={-5} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                            <Tooltip 
+                                cursor={{ fill: '#f8fafc' }}
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs">
+                                                <p className="font-bold mb-1 opacity-70">{label}</p>
+                                                <p className="text-base">Files: <span className="text-indigo-300 font-bold">{payload[0].value}</span></p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={50} isAnimationActive={false}>
+                              {stats.cycleChartData.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
+                              ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                        <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Insufficient cycle history.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* Earnings Trend Graph */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-emerald-500" /> Earnings History
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Estimated PHP payout per cycle</p>
+                </div>
+            </div>
+            <div className="h-[280px] w-full">
+                {stats.cycleChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="earnGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} height={40} angle={-5} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} hide />
+                            <Tooltip 
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xl text-xs">
+                                                <p className="font-bold mb-2 text-slate-500 border-b border-slate-100 pb-1">{label}</p>
+                                                <p className="text-lg font-black text-emerald-600">₱{payload[0].value?.toLocaleString()}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">${(payload[0].value / phpRate * usdRate).toFixed(2)} USD</p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Area type="monotone" dataKey="earnings" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#earnGradient)" isAnimationActive={false} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                        <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Add worked files to see earnings chart.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+      </div>
+
       {/* Monthly Statistics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-indigo-500" /> Monthly Output
+                    <TrendingUp className="w-5 h-5 text-indigo-500" /> Monthly Volume
                  </h3>
                  <div className="px-2.5 py-1 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Volume Metric
+                    Output Metric
                  </div>
               </div>
               <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per calendar month.</p>
            </div>
-           <div className="h-[300px] w-full flex-1 min-h-[300px]">
+           <div className="h-[250px] w-full">
               {stats.chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                    <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -517,7 +567,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-amber-500" /> Turnaround Efficiency
+                    <Clock className="w-5 h-5 text-amber-500" /> Efficiency Metric
                  </h3>
                  <div className="px-2.5 py-1 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     Speed Metric
@@ -525,7 +575,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
               </div>
               <p className="text-xs text-slate-500 mt-1">Average days taken to complete a file.</p>
            </div>
-           <div className="h-[300px] w-full flex-1 min-h-[300px]">
+           <div className="h-[250px] w-full">
               {stats.chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                    <LineChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>

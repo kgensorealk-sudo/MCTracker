@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck } from 'lucide-react';
+import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -13,6 +13,9 @@ interface ManuscriptListProps {
   activeFilter: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER';
 }
 
+type SortKey = 'status' | 'manuscriptId' | 'dateReceived' | 'priority' | 'statusDate';
+type SortDirection = 'asc' | 'desc' | null;
+
 const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkReview, activeFilter }) => {
   const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER'>(activeFilter);
   const [search, setSearch] = useState('');
@@ -22,6 +25,12 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     start: '', 
     end: '', 
     field: 'dateReceived' 
+  });
+
+  // Sorting State
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: 'statusDate',
+    direction: 'desc'
   });
 
   // Query Modal State
@@ -45,49 +54,116 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     HANDOVER: handoverCount
   };
 
-  const filtered = manuscripts.filter(m => {
-    let matchesStatus = false;
-    if (filterStatus === 'ALL') matchesStatus = true;
-    else if (filterStatus === 'PENDING_GROUP') {
-      matchesStatus = [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
-    } else if (filterStatus === 'HANDOVER') {
-      matchesStatus = m.status === Status.WORKED || m.status === Status.PENDING_JM;
-    } else {
-      matchesStatus = m.status === filterStatus;
+  // Logical order for status sorting
+  const statusWeight: Record<Status, number> = {
+    [Status.BILLED]: 5,
+    [Status.WORKED]: 4,
+    [Status.PENDING_CED]: 3,
+    [Status.PENDING_TL]: 2,
+    [Status.PENDING_JM]: 1,
+    [Status.UNTOUCHED]: 0
+  };
+
+  const priorityWeight = {
+    'Urgent': 3,
+    'High': 2,
+    'Normal': 1
+  };
+
+  const handleSort = (key: SortKey) => {
+    let direction: SortDirection = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null;
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    // 1. Filter
+    let result = manuscripts.filter(m => {
+      let matchesStatus = false;
+      if (filterStatus === 'ALL') matchesStatus = true;
+      else if (filterStatus === 'PENDING_GROUP') {
+        matchesStatus = [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
+      } else if (filterStatus === 'HANDOVER') {
+        matchesStatus = m.status === Status.WORKED || m.status === Status.PENDING_JM;
+      } else {
+        matchesStatus = m.status === filterStatus;
+      }
+
+      const statusLabel = m.status.toLowerCase().replace(/_/g, ' ');
+      const matchesSearch = 
+        m.manuscriptId.toLowerCase().includes(search.toLowerCase()) || 
+        m.journalCode.toLowerCase().includes(search.toLowerCase()) ||
+        statusLabel.includes(search.toLowerCase());
+
+      const matchesDate = (() => {
+        if (!dateRange.start && !dateRange.end) return true;
+        let dateValue: string | undefined;
+        if (dateRange.field === 'dateStatusChanged') {
+             dateValue = (m.status === Status.WORKED && m.completedDate) 
+               ? m.completedDate 
+               : (m.dateStatusChanged || m.dateUpdated);
+        } else if (dateRange.field === 'dueDate') {
+             dateValue = m.dueDate;
+        } else {
+             dateValue = m.dateReceived;
+        }
+        if (!dateValue) return false;
+        const itemTime = new Date(dateValue).getTime();
+        if (isNaN(itemTime)) return false;
+        const startTime = dateRange.start ? new Date(dateRange.start).setHours(0,0,0,0) : -Infinity;
+        const endTime = dateRange.end ? new Date(dateRange.end).setHours(23,59,59,999) : Infinity;
+        return itemTime >= startTime && itemTime <= endTime;
+      })();
+
+      return matchesStatus && matchesSearch && matchesDate;
+    });
+
+    // 2. Sort
+    if (sortConfig.direction) {
+      result.sort((a, b) => {
+        let valA: any;
+        let valB: any;
+
+        switch (sortConfig.key) {
+          case 'status':
+            valA = statusWeight[a.status];
+            valB = statusWeight[b.status];
+            break;
+          case 'manuscriptId':
+            valA = a.manuscriptId.toLowerCase();
+            valB = b.manuscriptId.toLowerCase();
+            break;
+          case 'priority':
+            valA = priorityWeight[a.priority] || 0;
+            valB = priorityWeight[b.priority] || 0;
+            break;
+          case 'statusDate':
+            valA = new Date((a.status === Status.WORKED && a.completedDate) ? a.completedDate : (a.dateStatusChanged || a.dateUpdated)).getTime();
+            valB = new Date((b.status === Status.WORKED && b.completedDate) ? b.completedDate : (b.dateStatusChanged || b.dateUpdated)).getTime();
+            break;
+          default:
+            valA = new Date(a[sortConfig.key as keyof Manuscript] as string || 0).getTime();
+            valB = new Date(b[sortConfig.key as keyof Manuscript] as string || 0).getTime();
+        }
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
     }
 
-    const matchesSearch = 
-      m.manuscriptId.toLowerCase().includes(search.toLowerCase()) || 
-      m.journalCode.toLowerCase().includes(search.toLowerCase());
-
-    const matchesDate = (() => {
-      if (!dateRange.start && !dateRange.end) return true;
-      let dateValue: string | undefined;
-      if (dateRange.field === 'dateStatusChanged') {
-           dateValue = (m.status === Status.WORKED && m.completedDate) 
-             ? m.completedDate 
-             : (m.dateStatusChanged || m.dateUpdated);
-      } else if (dateRange.field === 'dueDate') {
-           dateValue = m.dueDate;
-      } else {
-           dateValue = m.dateReceived;
-      }
-      if (!dateValue) return false;
-      const itemTime = new Date(dateValue).getTime();
-      if (isNaN(itemTime)) return false;
-      const startTime = dateRange.start ? new Date(dateRange.start).setHours(0,0,0,0) : -Infinity;
-      const endTime = dateRange.end ? new Date(dateRange.end).setHours(23,59,59,999) : Infinity;
-      return itemTime >= startTime && itemTime <= endTime;
-    })();
-
-    return matchesStatus && matchesSearch && matchesDate;
-  });
+    return result;
+  }, [manuscripts, filterStatus, search, dateRange, sortConfig]);
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filtered.length && filtered.length > 0) {
+    if (selectedIds.size === filteredAndSorted.length && filteredAndSorted.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map(m => m.id)));
+      setSelectedIds(new Set(filteredAndSorted.map(m => m.id)));
     }
   };
 
@@ -218,7 +294,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   const downloadCSV = () => {
     const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
-    const rows = filtered.map(m => {
+    const rows = filteredAndSorted.map(m => {
       const notesContent = m.notes
         .map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`)
         .join('; ');
@@ -310,6 +386,13 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       date.getFullYear() === today.getFullYear();
   };
 
+  const renderSortIcon = (key: SortKey) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+    if (sortConfig.direction === 'asc') return <ArrowUp className="w-3 h-3 text-blue-600" />;
+    if (sortConfig.direction === 'desc') return <ArrowDown className="w-3 h-3 text-blue-600" />;
+    return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in-up">
       {/* Bulk Action Bar */}
@@ -318,7 +401,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
            <span className="font-bold text-sm whitespace-nowrap px-3 bg-white/10 rounded-lg py-1.5">{selectedIds.size} selected</span>
            <div className="h-6 w-px bg-white/20"></div>
            <button onClick={handleReviewBulk} className="flex items-center gap-2 hover:text-emerald-300 transition-colors text-sm font-semibold">
-             <ListChecks className="w-5 h-5" /> Review & Mark Worked
+             <ListChecks className="w-5 h-5" /> Review Items
            </button>
            <div className="h-6 w-px bg-white/20"></div>
            <button onClick={() => handleDirectBulkStatusChange(Status.BILLED)} className="flex items-center gap-2 hover:text-indigo-300 transition-colors text-sm font-semibold">
@@ -339,11 +422,19 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
-                placeholder="Search ID, Journal code..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all bg-white"
+                placeholder="Search ID, Journal, or Status..."
+                className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all bg-white"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
+              {search && (
+                <button 
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <button
                onClick={() => setShowDateFilters(!showDateFilters)}
@@ -430,30 +521,73 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
               <th className="px-6 py-4 w-10 text-center">
-                <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
+                <input type="checkbox" checked={filteredAndSorted.length > 0 && selectedIds.size === filteredAndSorted.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
               </th>
-              <th className="px-6 py-4 text-center">Status</th>
-              <th className="px-6 py-4 text-center">Status Date</th>
-              <th className="px-6 py-4 text-center">ID / Journal</th>
-              <th className="px-6 py-4 text-center">Date Sent</th>
+              <th 
+                className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                onClick={() => handleSort('status')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  Status {renderSortIcon('status')}
+                </div>
+              </th>
+              <th 
+                className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                onClick={() => handleSort('statusDate')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  Status Date {renderSortIcon('statusDate')}
+                </div>
+              </th>
+              <th 
+                className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                onClick={() => handleSort('manuscriptId')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  ID / Journal {renderSortIcon('manuscriptId')}
+                </div>
+              </th>
+              <th 
+                className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                onClick={() => handleSort('dateReceived')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  Date Sent {renderSortIcon('dateReceived')}
+                </div>
+              </th>
               <th className="px-6 py-4 text-center">Due Date</th>
-              <th className="px-6 py-4 text-center">Priority</th>
+              <th 
+                className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                onClick={() => handleSort('priority')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  Priority {renderSortIcon('priority')}
+                </div>
+              </th>
               <th className="px-6 py-4 min-w-[200px] text-center">Remarks</th>
               <th className="px-6 py-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {filtered.length === 0 && (
+            {filteredAndSorted.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-24 text-center text-slate-400">
                   <div className="flex flex-col items-center gap-2">
                     <Inbox className="w-12 h-12 text-slate-200" />
-                    <p>No manuscripts found matching your criteria.</p>
+                    <p>{search ? 'No matches found for your search.' : 'No manuscripts found matching your criteria.'}</p>
+                    {search && (
+                      <button 
+                        onClick={() => setSearch('')}
+                        className="text-blue-600 font-bold text-sm mt-2 hover:underline"
+                      >
+                        Clear search
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
             )}
-            {filtered.map((m) => {
+            {filteredAndSorted.map((m) => {
                const displayDateRaw = (m.status === Status.WORKED || m.status === Status.BILLED) && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
                const dateObj = new Date(displayDateRaw);
                const displayDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
