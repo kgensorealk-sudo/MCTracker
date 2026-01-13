@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { X, ClipboardList, Info, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, Tag, DollarSign } from 'lucide-react';
+import { X, ClipboardList, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, DollarSign } from 'lucide-react';
 
 interface BillingReconciliationModalProps {
   manuscripts: Manuscript[];

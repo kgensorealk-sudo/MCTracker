@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Manuscript, Status } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
 import { Trophy, TrendingUp, Clock, FileText, History, Search, Zap, LayoutGrid, ClipboardList, FileSearch, AlertCircle, BarChart3 } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
@@ -357,7 +357,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                               }}
                           />
                           <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="url(#cycleGradient)" maxBarSize={60} isAnimationActive={false}>
-                            {stats.cycleChartData.map((entry, index) => (
+                            {stats.cycleChartData.map((_, index) => (
                                 <Cell key={`cell-${index}`} fillOpacity={0.8 + (index / stats.cycleChartData.length) * 0.2} />
                             ))}
                           </Bar>
