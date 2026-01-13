@@ -103,19 +103,25 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
-  const handleMarkAsBilled = () => {
-    const idsToUpdate = billingAnalysis.matched
+  const handleFinishReconciliation = () => {
+    // Collect all matched items that are currently just "WORKED"
+    const idsToMarkBilled = billingAnalysis.matched
       .filter(m => m.status === Status.WORKED)
       .map(m => m.id);
 
-    if (idsToUpdate.length === 0) {
-      alert("No matched 'Worked' files found to update.");
-      return;
+    if (idsToMarkBilled.length > 0) {
+      // Use the cycle's start date as the billing reference for reporting
+      const targetBilledDate = selectedCycleData?.info.startDate.toISOString() || new Date().toISOString();
+      
+      onBulkUpdate?.(idsToMarkBilled, { 
+        status: Status.BILLED, 
+        billedDate: targetBilledDate 
+      });
+      
+      console.log(`Auto-finalized reconciliation: ${idsToMarkBilled.length} items marked as Billed.`);
     }
 
-    if (window.confirm(`Mark ${idsToUpdate.length} confirmed files as 'Billed'? This will sync your local database with the billing report.`)) {
-      onBulkUpdate?.(idsToUpdate, { status: Status.BILLED, billedDate: new Date().toISOString() });
-    }
+    handleClose();
   };
 
   const handleClaimExtra = (mId: string) => {
@@ -292,15 +298,10 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                          <span>Successfully matched {billingAnalysis.foundCount} items.</span>
                                          {billingAnalysis.statusMismatches > 0 && (
                                             <span className="text-rose-600 font-bold ml-1 flex items-center gap-1">
-                                               <AlertTriangle className="w-3.5 h-3.5" /> {billingAnalysis.statusMismatches} need status update
+                                               <AlertTriangle className="w-3.5 h-3.5" /> {billingAnalysis.statusMismatches} need status sync
                                             </span>
                                          )}
                                       </div>
-                                      {billingAnalysis.statusMismatches > 0 && (
-                                          <button onClick={handleMarkAsBilled} className="text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg flex items-center gap-2 bg-rose-600 text-white hover:bg-rose-700 shadow-md transition-all active:scale-95">
-                                             <RefreshCcw className="w-3.5 h-3.5" /> Sync Statuses ({billingAnalysis.statusMismatches})
-                                          </button>
-                                      )}
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                       {billingAnalysis.matched.map(m => (
@@ -400,7 +401,12 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
         </div>
 
         <div className="p-6 border-t border-slate-100 flex justify-end bg-white">
-           <button onClick={handleClose} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2">Finish Reconciliation <ArrowRight className="w-4 h-4" /></button>
+           <button 
+              onClick={handleFinishReconciliation} 
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+           >
+              Finish Reconciliation <ArrowRight className="w-4 h-4" />
+           </button>
         </div>
       </div>
     </div>

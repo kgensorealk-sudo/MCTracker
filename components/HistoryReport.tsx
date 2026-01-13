@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
-import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, ArrowUpRight, AlertTriangle, CheckCircle, FileCheck } from 'lucide-react';
+import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, ArrowUpRight, AlertTriangle, CheckCircle, FileCheck, CalendarDays } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
@@ -96,7 +96,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
     manuscripts.forEach(m => {
       if (m.status === Status.WORKED || m.status === Status.BILLED) {
-        // Deterministic Date Logic: Use billedDate if available, otherwise completed/status changed.
         const workDate = (m.status === Status.BILLED && m.billedDate) 
           ? m.billedDate 
           : (m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived);
@@ -132,35 +131,20 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
     const sortedCycles = Object.values(cycleGroups).sort((a, b) => b.info.id.localeCompare(a.info.id));
     
-    // Multi-rate aware calculations
-    let totalWorked = 0;
-    let totalEarningsPhp = 0;
-    let totalEarningsUsd = 0;
-
     const cycleChartData = [...sortedCycles].reverse().map(c => {
       const rates = cycleRates[c.info.id] || DEFAULT_RATES;
       const count = c.files.length;
-      const php = count * rates.php;
-      const usd = count * rates.usd;
-      
-      totalWorked += count;
-      totalEarningsPhp += php;
-      totalEarningsUsd += usd;
-
       return {
         name: c.info.label.split(' (')[0],
         count,
-        earnings: php,
-        usd: usd,
+        earnings: count * rates.php,
+        usd: count * rates.usd,
         id: c.info.id
       };
     });
 
     return {
       chartData,
-      totalWorked,
-      totalEarningsPhp,
-      totalEarningsUsd,
       cycleGroups,
       sortedCycles,
       cycleChartData
@@ -189,6 +173,20 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
     const billedCount = files.filter(f => f.status === Status.BILLED).length;
     const workedCount = files.filter(f => f.status === Status.WORKED).length;
     
+    // Payout Date Logic:
+    // Dec 26 - Jan 10 (C2) -> Payout Jan 25
+    // Jan 11 - Jan 25 (C1) -> Payout Feb 10
+    const endDate = cycle.info.endDate;
+    let payoutDate: Date;
+    if (selectedCycleId.endsWith('-C1')) {
+      payoutDate = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 10);
+    } else {
+      payoutDate = new Date(endDate.getFullYear(), endDate.getMonth(), 25);
+    }
+
+    const totalPotentialPhp = (billedCount + workedCount) * rates.php;
+    const totalPotentialUsd = (billedCount + workedCount) * rates.usd;
+
     return {
         total: files.length,
         billedCount,
@@ -196,7 +194,11 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         percentBilled: files.length > 0 ? Math.round((billedCount / files.length) * 100) : 0,
         pendingPhp: workedCount * rates.php,
         billedPhp: billedCount * rates.php,
-        rates
+        totalPotentialPhp,
+        totalPotentialUsd,
+        rates,
+        payoutDateStr: payoutDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        cycleLabel: cycle.info.label
     };
   }, [selectedCycleId, stats.cycleGroups, cycleRates]);
 
@@ -275,17 +277,27 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+        {/* Cycle Payout Card (Replaces Lifetime Earnings) */}
+        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
              <Wallet className="w-24 h-24" />
           </div>
           <div className="relative z-10">
-            <p className="text-emerald-100 font-bold uppercase text-xs tracking-wider mb-3">Lifetime Earnings (Est.)</p>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-4xl font-black tracking-tight">₱{stats.totalEarningsPhp.toLocaleString(undefined, { maximumFractionDigits: 2 })}</h3>
+            <div className="flex items-center justify-between mb-3">
+               <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider">Estimated Cycle Payout</p>
+               {selectedCycleStats && (
+                  <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-white/10">
+                     <CalendarDays className="w-3 h-3" /> Payout on {selectedCycleStats.payoutDateStr}
+                  </div>
+               )}
             </div>
-            <div className="mt-4 flex items-center gap-2 text-sm font-bold text-emerald-100 bg-black/10 w-fit px-3 py-1 rounded-lg backdrop-blur-sm border border-white/10">
-               <DollarSign className="w-3.5 h-3.5" /> {stats.totalEarningsUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-4xl font-black tracking-tight">
+                ₱{selectedCycleStats ? selectedCycleStats.totalPotentialPhp.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'}
+              </h3>
+            </div>
+            <div className="mt-4 flex items-center gap-2 text-sm font-bold text-indigo-100 bg-black/10 w-fit px-3 py-1 rounded-lg backdrop-blur-sm border border-white/10">
+               <DollarSign className="w-3.5 h-3.5" /> {selectedCycleStats ? selectedCycleStats.totalPotentialUsd.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'} USD
             </div>
           </div>
         </div>
@@ -293,17 +305,17 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
            <div className="flex justify-between items-start mb-4">
               <div>
-                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Lifetime Worked</p>
-                 <h3 className="text-3xl font-bold text-slate-800 mt-2">{stats.totalWorked}</h3>
+                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Cycle Volume</p>
+                 <h3 className="text-3xl font-bold text-slate-800 mt-2">{selectedCycleStats?.total || 0}</h3>
               </div>
               <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors">
                  <FileText className="w-6 h-6 text-indigo-600" />
               </div>
            </div>
            <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
-              <span className="text-sm text-slate-500 font-medium">Monthly Potential:</span>
+              <span className="text-sm text-slate-500 font-medium">Verification:</span>
               <span className="text-sm font-bold text-slate-700 ml-auto flex items-center gap-1 text-emerald-600">
-                 <ArrowUpRight className="w-4 h-4" /> ₱{(stats.totalEarningsPhp / Math.max(1, stats.chartData.length)).toFixed(0)}/mo
+                 {selectedCycleStats?.percentBilled || 0}% Complete
               </span>
            </div>
         </div>
@@ -311,14 +323,16 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
              <div className="flex justify-between items-start mb-4">
               <div>
-                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Productivity Pace</p>
-                 <h3 className="text-3xl font-bold text-slate-800 mt-2">{stats.totalWorked > 0 ? (stats.totalWorked / Math.max(1, stats.sortedCycles.length)).toFixed(1) : 0}</h3>
+                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Daily Pace</p>
+                 <h3 className="text-3xl font-bold text-slate-800 mt-2">
+                    {selectedCycleStats && selectedCycleStats.total > 0 ? (selectedCycleStats.total / 15).toFixed(1) : 0}
+                 </h3>
               </div>
               <div className="p-3 bg-amber-50 rounded-xl group-hover:bg-amber-100 transition-colors">
                  <TrendingUp className="w-6 h-6 text-amber-600" />
               </div>
            </div>
-           <div className="text-xs text-slate-400 font-medium">Average files per billing cycle</div>
+           <div className="text-xs text-slate-400 font-medium">Average files per work day in cycle</div>
         </div>
       </div>
 
