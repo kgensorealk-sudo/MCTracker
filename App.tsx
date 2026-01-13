@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status, UserSchedule } from './types';
 import Dashboard from './components/Dashboard';
@@ -18,6 +19,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(!isSupabaseConfigured);
 
   // Data States
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
@@ -38,43 +40,59 @@ const App: React.FC = () => {
   const [bulkQueue, setBulkQueue] = useState<string[]>([]);
   const [isBulkReview, setIsBulkReview] = useState(false);
 
+  const enterOfflineMode = () => {
+    console.log('App running in Offline Mode (LocalStorage)');
+    setIsOffline(true);
+    setSession({
+      access_token: 'offline_token',
+      refresh_token: 'offline_refresh',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'offline-user',
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: 'guest@local.dev',
+        app_metadata: { provider: 'email' },
+        user_metadata: { full_name: 'Guest Analyst' },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    } as Session);
+    setLoading(false);
+  };
+
   // Auth & Initial Load
   useEffect(() => {
-    // OFFLINE MODE: If no Supabase config, mock a session to allow local usage
-    if (!isSupabaseConfigured) {
-      console.log('App running in Offline Mode (LocalStorage)');
-      setSession({
-        access_token: 'offline_token',
-        refresh_token: 'offline_refresh',
-        expires_in: 3600,
-        token_type: 'bearer',
-        user: {
-          id: 'offline-user',
-          aud: 'authenticated',
-          role: 'authenticated',
-          email: 'guest@local.dev',
-          app_metadata: { provider: 'email' },
-          user_metadata: { full_name: 'Guest Analyst' },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      } as Session);
-      setLoading(false);
-      return;
-    }
+    const initAuth = async () => {
+      if (!isSupabaseConfigured) {
+        enterOfflineMode();
+        return;
+      }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    }).catch(err => {
-      console.error("Supabase auth error:", err);
-      setLoading(false);
-    });
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (session) {
+          setSession(session);
+        }
+        setLoading(false);
+      } catch (err: any) {
+        console.error("Supabase auth error:", err);
+        if (err.message?.includes('fetch') || err.name === 'TypeError') {
+          enterOfflineMode();
+        } else {
+          setLoading(false);
+        }
+      }
+    };
+
+    initAuth();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      if (session) setSession(session);
     });
 
     return () => subscription.unsubscribe();
@@ -91,8 +109,8 @@ const App: React.FC = () => {
     setDataLoading(true);
     try {
       const [mss, settings] = await Promise.all([
-        dataService.getManuscripts(),
-        dataService.getUserSettings()
+        dataService.getManuscripts(isOffline),
+        dataService.getUserSettings(isOffline)
       ]);
       
       setManuscripts(mss);
@@ -100,8 +118,12 @@ const App: React.FC = () => {
         setTargetPerCycle(settings.targetPerCycle);
         setUserSchedule(settings.userSchedule);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading data:", error);
+      // If we encounter a fetch error during normal data loading, try one last local fallback
+      if (error.message?.includes('fetch') && !isOffline) {
+        enterOfflineMode();
+      }
     } finally {
       setDataLoading(false);
     }
@@ -111,10 +133,10 @@ const App: React.FC = () => {
     setDataLoading(true);
     try {
       if (editingId) {
-        const updated = await dataService.updateManuscript(manuscript);
+        const updated = await dataService.updateManuscript(manuscript, isOffline);
         setManuscripts(prev => prev.map(m => m.id === updated.id ? updated : m));
       } else {
-        const created = await dataService.createManuscript(manuscript);
+        const created = await dataService.createManuscript(manuscript, isOffline);
         setManuscripts(prev => [created, ...prev]);
       }
       
@@ -155,7 +177,7 @@ const App: React.FC = () => {
     }
 
     try {
-      await dataService.updateManuscript(updatedManuscript);
+      await dataService.updateManuscript(updatedManuscript, isOffline);
     } catch (error: any) {
       console.error("Quick update failed:", error);
       alert(`Failed to update record: ${error.message || 'Unknown error'}`);
@@ -168,11 +190,9 @@ const App: React.FC = () => {
     setDataLoading(true);
 
     const now = new Date().toISOString();
-    // Using any for finalUpdates to allow dynamic property assignment while respecting interface logic
     const finalUpdates: any = { ...updates, dateStatusChanged: now };
 
     if (updates.status === Status.WORKED) {
-      // Fix: Corrected property name from completed_date to completedDate to match Manuscript interface
       finalUpdates.completedDate = now;
     }
 
@@ -181,7 +201,7 @@ const App: React.FC = () => {
     ));
 
     try {
-      await dataService.updateManuscripts(ids, finalUpdates);
+      await dataService.updateManuscripts(ids, finalUpdates, isOffline);
     } catch (error: any) {
       console.error("Bulk update failed:", error);
       alert(`Failed to update multiple records: ${error.message || 'Unknown error'}`);
@@ -203,7 +223,7 @@ const App: React.FC = () => {
     if (window.confirm("Are you sure you want to delete this record? This action cannot be undone.")) {
       setDataLoading(true);
       try {
-        await dataService.deleteManuscript(id);
+        await dataService.deleteManuscript(id, isOffline);
         setManuscripts(prev => prev.filter(m => m.id !== id));
       } catch (error: any) {
         console.error("Error deleting:", error);
@@ -219,7 +239,7 @@ const App: React.FC = () => {
     try {
       const createdItems: Manuscript[] = [];
       for (const item of newItems) {
-        const created = await dataService.createManuscript(item);
+        const created = await dataService.createManuscript(item, isOffline);
         createdItems.push(created);
       }
       setManuscripts(prev => [...createdItems, ...prev]);
@@ -236,12 +256,12 @@ const App: React.FC = () => {
 
   const handleUpdateTarget = (target: number) => {
     setTargetPerCycle(target);
-    dataService.updateTarget(target).catch(console.error);
+    dataService.updateTarget(target, isOffline).catch(console.error);
   };
 
   const handleUpdateSchedule = (schedule: UserSchedule) => {
     setUserSchedule(schedule);
-    dataService.updateSchedule(schedule).catch((err: any) => {
+    dataService.updateSchedule(schedule, isOffline).catch((err: any) => {
       console.error("Schedule sync failed:", err);
       if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column') || err.message.includes('relation'))) {
          alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
@@ -253,7 +273,7 @@ const App: React.FC = () => {
     const now = new Date().toISOString();
     setManuscripts(prev => prev.map(m => ids.includes(m.id) ? { ...m, dateEmailed: now } : m));
     try {
-      await dataService.updateManuscripts(ids, { dateEmailed: now });
+      await dataService.updateManuscripts(ids, { dateEmailed: now }, isOffline);
     } catch (error: any) {
       console.error("Failed to mark reported: " + (error.message || "Unknown persistence error"));
     }
@@ -284,8 +304,12 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+    if (isSupabaseConfigured && !isOffline) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        window.location.reload();
+      }
     } else {
       window.location.reload();
     }
@@ -334,7 +358,7 @@ const App: React.FC = () => {
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
             {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
-            {!isSupabaseConfigured && (
+            {isOffline && (
               <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2">
                  <WifiOff className="w-3 h-3" /> Offline Mode
               </div>

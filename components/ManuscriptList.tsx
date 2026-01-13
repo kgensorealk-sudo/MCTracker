@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
 import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck } from 'lucide-react';
@@ -394,20 +395,20 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
              </p>
           </div>
         )}
-        <table className="w-full text-left text-sm text-slate-600">
+        <table className="w-full text-center text-sm text-slate-600">
           <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
             <tr>
-              <th className="px-6 py-4 w-10">
+              <th className="px-6 py-4 w-10 text-center">
                 <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
               </th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Status Date</th>
-              <th className="px-6 py-4">ID / Journal</th>
-              <th className="px-6 py-4">Date Sent</th>
-              <th className="px-6 py-4">Due Date</th>
-              <th className="px-6 py-4">Priority</th>
-              <th className="px-6 py-4 min-w-[200px]">Remarks</th>
-              <th className="px-6 py-4 text-right">Actions</th>
+              <th className="px-6 py-4 text-center">Status</th>
+              <th className="px-6 py-4 text-center">Status Date</th>
+              <th className="px-6 py-4 text-center">ID / Journal</th>
+              <th className="px-6 py-4 text-center">Date Sent</th>
+              <th className="px-6 py-4 text-center">Due Date</th>
+              <th className="px-6 py-4 text-center">Priority</th>
+              <th className="px-6 py-4 min-w-[200px] text-center">Remarks</th>
+              <th className="px-6 py-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -430,33 +431,33 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
                return (
                 <tr key={m.id} className={`group transition-all duration-200 ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-center">
                     <input type="checkbox" checked={isSelected} onChange={() => handleSelectOne(m.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(m.status)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap text-center">{getStatusBadge(m.status)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`text-xs ${isActivityToday ? 'text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>{displayDate}</span>
                     {m.dateEmailed && (
-                      <div className="text-[9px] text-indigo-500 font-bold flex items-center gap-1 mt-0.5">
-                        <Mail className="w-2.5 h-2.5" /> Emailed
+                      <div className="text-[9px] text-indigo-500 font-bold flex flex-col items-center gap-1 mt-0.5 text-center">
+                        <Mail className="w-2.5 h-2.5 mx-auto" /> Emailed
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-0.5">
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex flex-col gap-0.5 items-center">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{m.manuscriptId}</span>
                       </div>
                       <div className="text-slate-400 text-xs font-mono">{m.journalCode}</div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap"><div className="text-slate-700">{new Date(m.dateReceived).toLocaleDateString()}</div></td>
-                  <td className="px-6 py-4 whitespace-nowrap"><div className={`text-slate-700 ${!m.dueDate ? 'text-slate-400 italic' : ''}`}>{m.dueDate ? new Date(m.dueDate).toLocaleDateString() : 'None'}</div></td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap text-center"><div className="text-slate-700">{new Date(m.dateReceived).toLocaleDateString()}</div></td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center"><div className={`text-slate-700 ${!m.dueDate ? 'text-slate-400 italic' : ''}`}>{m.dueDate ? new Date(m.dueDate).toLocaleDateString() : 'None'}</div></td>
+                  <td className="px-6 py-4 text-center">
                     <select
                       value={m.priority}
                       onChange={(e) => onUpdate(m.id, { priority: e.target.value as any })}
-                      className={`block w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                      className={`block w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-center ${
                         m.priority === 'Urgent' ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 
                         m.priority === 'High' ? 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100' : 
                         'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
@@ -467,14 +468,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       <option value="Urgent">Urgent</option>
                     </select>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-2">
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex flex-col gap-2 items-center">
                       {m.notes.length > 0 ? (
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2 w-full max-w-[250px]">
                           {m.notes.map((note) => (
                             <div key={note.id} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
-                              <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{note.content}</div>
-                              <div className="text-[10px] text-slate-400 mt-1 text-right flex justify-end items-center gap-1">
+                              <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed text-center">{note.content}</div>
+                              <div className="text-[10px] text-slate-400 mt-1 flex justify-center items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {new Date(note.timestamp).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
                               </div>
@@ -486,8 +487,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <td className="px-6 py-4 text-center whitespace-nowrap">
+                    <div className="flex justify-center items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       {m.status !== Status.WORKED && (
                         <>
                           <button onClick={() => handleSendEmail(m)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-all shadow-sm hover:shadow" title="Draft Email (mailto)">
@@ -532,19 +533,19 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                 </button>
              </div>
              
-             <div className="p-6">
+             <div className="p-6 text-center">
                 <label className="block text-sm font-bold text-slate-700 mb-2">Query Details / Notes</label>
                 <div className="relative">
                   <MessageSquare className="absolute top-3 left-3 w-4 h-4 text-slate-400" />
                   <textarea
-                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-100 focus:border-rose-400 transition-all text-sm min-h-[100px] resize-none"
+                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-100 focus:border-rose-400 transition-all text-sm min-h-[100px] resize-none text-center"
                      placeholder="e.g. Missing author information..."
                      value={queryNote}
                      onChange={(e) => setQueryNote(e.target.value)}
                      autoFocus
                   />
                 </div>
-                <p className="text-xs text-slate-400 mt-2 text-right">This will update status to JM Query</p>
+                <p className="text-xs text-slate-400 mt-2">This will update status to JM Query</p>
              </div>
 
              <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">

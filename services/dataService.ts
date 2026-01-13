@@ -1,3 +1,4 @@
+
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Manuscript, UserSchedule } from '../types';
 
@@ -8,11 +9,12 @@ const mapToManuscript = (row: any): Manuscript => ({
   journalCode: row.journal_code,
   status: row.status,
   priority: row.priority,
-  // Fix: Object literal may only specify known properties. Using camelCase to match Manuscript interface.
   dateReceived: row.date_received,
   dueDate: row.due_date,
+  // Fix: renamed completed_date to completedDate to match Manuscript interface
   completedDate: row.completed_date,
   dateUpdated: row.date_updated,
+  // Fix: renamed dateStatus_changed to dateStatusChanged to match Manuscript interface
   dateStatusChanged: row.date_status_changed,
   queryReason: row.query_reason, 
   dateQueried: row.date_queried,
@@ -25,160 +27,141 @@ const STORAGE_KEYS = {
   SETTINGS: 'mc_tracker_local_settings'
 };
 
+const getLocalManuscripts = (): Manuscript[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.MANUSCRIPTS);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getLocalSettings = () => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const dataService = {
   // --- Manuscripts ---
   
-  async getManuscripts() {
-    if (!isSupabaseConfigured) {
-      const stored = localStorage.getItem(STORAGE_KEYS.MANUSCRIPTS);
-      return stored ? JSON.parse(stored) : [];
+  async getManuscripts(forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      return getLocalManuscripts();
     }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+      if (!user) return getLocalManuscripts();
 
       const { data, error } = await supabase
         .from('manuscripts')
         .select('*')
-        .eq('user_id', user.id) // Enforce user isolation
+        .eq('user_id', user.id)
         .order('date_updated', { ascending: false });
         
-      if (error) throw new Error(error.message);
-      return data.map(mapToManuscript);
+      if (error) throw error;
+      return (data || []).map(mapToManuscript);
     } catch (err: any) {
-      throw new Error(err.message || "Failed to fetch manuscripts");
+      console.warn("Supabase fetch failed, falling back to local:", err);
+      return getLocalManuscripts();
     }
   },
 
-  async createManuscript(m: Manuscript) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getManuscripts();
+  async createManuscript(m: Manuscript, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalManuscripts();
       const newItem = { ...m, id: m.id || crypto.randomUUID() };
       const updated = [newItem, ...current];
       localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
       return newItem;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const payload: any = {
-        user_id: user.id,
-        manuscript_id: m.manuscriptId,
-        journal_code: m.journalCode,
-        status: m.status,
-        priority: m.priority,
-        date_received: m.dateReceived,
-        due_date: m.dueDate,
-        completed_date: m.completedDate,
-        date_updated: new Date().toISOString(),
-        date_status_changed: m.dateStatusChanged,
-        query_reason: m.queryReason,
-        date_queried: m.dateQueried,
-        date_emailed: m.dateEmailed,
-        notes: m.notes
-    };
+      const payload: any = {
+          user_id: user.id,
+          manuscript_id: m.manuscriptId,
+          journal_code: m.journalCode,
+          status: m.status,
+          priority: m.priority,
+          date_received: m.dateReceived,
+          due_date: m.dueDate,
+          completed_date: m.completedDate,
+          date_updated: new Date().toISOString(),
+          date_status_changed: m.dateStatusChanged,
+          query_reason: m.queryReason,
+          date_queried: m.dateQueried,
+          date_emailed: m.dateEmailed,
+          notes: m.notes
+      };
 
-    let attempt = 0;
-    const maxAttempts = 5; 
+      const { data, error } = await supabase
+        .from('manuscripts')
+        .insert([payload])
+        .select()
+        .single();
 
-    while (attempt < maxAttempts) {
-        const { data, error } = await supabase
-          .from('manuscripts')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (!error) return mapToManuscript(data);
-
-        // More aggressive error detection for missing columns
-        const isColumnError = error.code === '42703' || 
-                             error.message.includes('column') || 
-                             error.message.includes('schema cache');
-
-        if (isColumnError) {
-            const msg = error.message.toLowerCase();
-            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
-                               msg.includes('date_queried') ? 'date_queried' :
-                               msg.includes('date_emailed') ? 'date_emailed' : null;
-            
-            if (missingCol && payload[missingCol] !== undefined) {
-                delete payload[missingCol];
-                attempt++;
-                continue;
-            }
-        }
-        throw new Error(error.message || "Unknown DB Error during creation");
+      if (error) throw error;
+      return mapToManuscript(data);
+    } catch (err: any) {
+      console.warn("Remote create failed, syncing locally:", err);
+      return this.createManuscript(m, true);
     }
-    throw new Error("Failed to create manuscript: Database schema incompatible.");
   },
 
-  async updateManuscript(m: Manuscript) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getManuscripts();
+  async updateManuscript(m: Manuscript, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalManuscripts();
       const updated = current.map((item: Manuscript) => item.id === m.id ? m : item);
       localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
       return m;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const payload: any = {
-        manuscript_id: m.manuscriptId,
-        journal_code: m.journalCode,
-        status: m.status,
-        priority: m.priority,
-        date_received: m.dateReceived,
-        due_date: m.dueDate,
-        completed_date: m.completedDate,
-        date_updated: new Date().toISOString(),
-        date_status_changed: m.dateStatusChanged,
-        query_reason: m.queryReason,
-        date_queried: m.dateQueried,
-        date_emailed: m.dateEmailed,
-        notes: m.notes
-    };
+      const payload: any = {
+          manuscript_id: m.manuscriptId,
+          journal_code: m.journalCode,
+          status: m.status,
+          priority: m.priority,
+          date_received: m.dateReceived,
+          due_date: m.dueDate,
+          completed_date: m.completedDate,
+          date_updated: new Date().toISOString(),
+          date_status_changed: m.dateStatusChanged,
+          query_reason: m.queryReason,
+          date_queried: m.dateQueried,
+          date_emailed: m.dateEmailed,
+          notes: m.notes
+      };
 
-    let attempt = 0;
-    const maxAttempts = 5;
+      const { data, error } = await supabase
+        .from('manuscripts')
+        .update(payload)
+        .eq('id', m.id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
 
-    while (attempt < maxAttempts) {
-        const { data, error } = await supabase
-          .from('manuscripts')
-          .update(payload)
-          .eq('id', m.id)
-          .eq('user_id', user.id)
-          .select()
-          .single();
-
-        if (!error) return mapToManuscript(data);
-
-        const isColumnError = error.code === '42703' || 
-                             error.message.includes('column') || 
-                             error.message.includes('schema cache');
-
-        if (isColumnError) {
-            const msg = error.message.toLowerCase();
-            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
-                               msg.includes('date_queried') ? 'date_queried' :
-                               msg.includes('date_emailed') ? 'date_emailed' : null;
-
-            if (missingCol && payload[missingCol] !== undefined) {
-                delete payload[missingCol];
-                attempt++;
-                continue;
-            }
-        }
-        throw new Error(error.message || "Unknown DB Error during update");
+      if (error) throw error;
+      return mapToManuscript(data);
+    } catch (err: any) {
+      console.warn("Remote update failed, syncing locally:", err);
+      return this.updateManuscript(m, true);
     }
-    throw new Error("Failed to update manuscript: Database schema incompatible.");
   },
 
-  async updateManuscripts(ids: string[], updates: Partial<Manuscript>) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getManuscripts();
+  async updateManuscripts(ids: string[], updates: Partial<Manuscript>, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalManuscripts();
       const now = new Date().toISOString();
       const updated = current.map((item: Manuscript) => 
         ids.includes(item.id) ? { ...item, ...updates, dateUpdated: now } : item
@@ -187,135 +170,135 @@ export const dataService = {
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const dbUpdates: any = {
-       date_updated: new Date().toISOString()
-    };
-    if (updates.status) dbUpdates.status = updates.status;
-    if (updates.priority) dbUpdates.priority = updates.priority;
-    if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
-    if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
-    if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
-    if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
-    if (updates.dateEmailed !== undefined) dbUpdates.date_emailed = updates.dateEmailed;
-    
-    let attempt = 0;
-    const maxAttempts = 5;
+      const dbUpdates: any = {
+         date_updated: new Date().toISOString()
+      };
+      if (updates.status) dbUpdates.status = updates.status;
+      if (updates.priority) dbUpdates.priority = updates.priority;
+      if (updates.dateStatusChanged) dbUpdates.date_status_changed = updates.dateStatusChanged;
+      if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate;
+      if (updates.queryReason !== undefined) dbUpdates.query_reason = updates.queryReason;
+      if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
+      if (updates.dateEmailed !== undefined) dbUpdates.date_emailed = updates.dateEmailed;
+      
+      const { error } = await supabase
+        .from('manuscripts')
+        .update(dbUpdates)
+        .in('id', ids)
+        .eq('user_id', user.id);
 
-    while (attempt < maxAttempts) {
-        const { error } = await supabase
-          .from('manuscripts')
-          .update(dbUpdates)
-          .in('id', ids)
-          .eq('user_id', user.id);
-
-        if (!error) return;
-
-        const isColumnError = error.code === '42703' || 
-                             error.message.includes('column') || 
-                             error.message.includes('schema cache');
-
-        if (isColumnError) {
-            const msg = error.message.toLowerCase();
-            const missingCol = msg.includes('query_reason') ? 'query_reason' : 
-                               msg.includes('date_queried') ? 'date_queried' :
-                               msg.includes('date_emailed') ? 'date_emailed' : null;
-            
-            if (missingCol && dbUpdates[missingCol] !== undefined) {
-                delete dbUpdates[missingCol];
-                attempt++;
-                continue;
-            }
-        }
-        throw new Error(error.message || "Unknown DB Error during bulk update");
+      if (error) throw error;
+    } catch (err: any) {
+      console.warn("Remote bulk update failed, syncing locally:", err);
+      return this.updateManuscripts(ids, updates, true);
     }
-    throw new Error("Failed to bulk update: Database schema incompatible.");
   },
 
-  async deleteManuscript(id: string) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getManuscripts();
+  async deleteManuscript(id: string, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalManuscripts();
       const updated = current.filter((item: Manuscript) => item.id !== id);
       localStorage.setItem(STORAGE_KEYS.MANUSCRIPTS, JSON.stringify(updated));
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const { error } = await supabase
-      .from('manuscripts')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
+      const { error } = await supabase
+        .from('manuscripts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
 
-    if (error) throw new Error(error.message);
+      if (error) throw error;
+    } catch (err: any) {
+      console.warn("Remote delete failed, syncing locally:", err);
+      return this.deleteManuscript(id, true);
+    }
   },
 
-  async getUserSettings() {
-    if (!isSupabaseConfigured) {
-      const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      return stored ? JSON.parse(stored) : null;
+  async getUserSettings(forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      return getLocalSettings();
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return getLocalSettings();
 
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle(); // maybeSingle handles 0 rows gracefully
 
-    if (error && error.code !== 'PGRST116') throw error;
-    if (!data) return null;
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!data) return getLocalSettings();
 
-    return {
-      targetPerCycle: data.target_per_cycle,
-      userSchedule: {
-        daysOff: data.days_off || [],
-        weeklyWeights: data.weekly_weights || [1, 1, 1, 1, 1, 1, 1]
-      }
-    };
+      return {
+        targetPerCycle: data.target_per_cycle,
+        userSchedule: {
+          daysOff: data.days_off || [],
+          weeklyWeights: data.weekly_weights || [1, 1, 1, 1, 1, 1, 1]
+        }
+      };
+    } catch (err: any) {
+      console.warn("Supabase settings fetch failed, falling back to local:", err);
+      return getLocalSettings();
+    }
   },
 
-  async updateTarget(target: number) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
+  async updateTarget(target: number, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, targetPerCycle: target }));
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const { error } = await supabase
-      .from('user_settings')
-      .upsert({ user_id: user.id, target_per_cycle: target }, { onConflict: 'user_id' });
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({ user_id: user.id, target_per_cycle: target }, { onConflict: 'user_id' });
 
-    if (error) throw new Error(error.message);
+      if (error) throw error;
+    } catch (err: any) {
+      console.warn("Remote target update failed, syncing locally:", err);
+      return this.updateTarget(target, true);
+    }
   },
 
-  async updateSchedule(schedule: UserSchedule) {
-    if (!isSupabaseConfigured) {
-      const current = await this.getUserSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
+  async updateSchedule(schedule: UserSchedule, forceLocal = false) {
+    if (!isSupabaseConfigured || forceLocal) {
+      const current = getLocalSettings() || { targetPerCycle: 50, userSchedule: { daysOff: [], weeklyWeights: [1, 1, 1, 1, 1, 1, 1] } };
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...current, userSchedule: schedule }));
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const { error } = await supabase
-      .from('user_settings')
-      .upsert({ 
-        user_id: user.id, 
-        days_off: schedule.daysOff, 
-        weekly_weights: schedule.weeklyWeights 
-      }, { onConflict: 'user_id' });
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({ 
+          user_id: user.id, 
+          days_off: schedule.daysOff, 
+          weekly_weights: schedule.weeklyWeights 
+        }, { onConflict: 'user_id' });
 
-    if (error) throw new Error(error.message);
+      if (error) throw error;
+    } catch (err: any) {
+      console.warn("Remote schedule update failed, syncing locally:", err);
+      return this.updateSchedule(schedule, true);
+    }
   }
 };

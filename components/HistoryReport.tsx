@@ -1,18 +1,67 @@
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useState } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Zap, AlertCircle, HelpCircle } from 'lucide-react';
+import { Calendar, Trophy, TrendingUp, Clock, FileText, ArrowUpRight, ArrowDownRight, History, Flame, Search, Zap, AlertCircle, HelpCircle, LayoutGrid, CheckCircle, ClipboardList, AlertTriangle, FileSearch, ArrowRight, Info } from 'lucide-react';
+import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
   manuscripts: Manuscript[];
   userName: string;
 }
 
+interface CycleInfo {
+  id: string;
+  label: string;
+  startDate: Date;
+  endDate: Date;
+}
+
 const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
-  
+  const [selectedCycleId, setSelectedCycleId] = useState<string>('');
+  const [isReconModalOpen, setIsReconModalOpen] = useState(false);
+
+  // Helper: Determine which Cycle a date belongs to
+  const getCycleForDate = (dateStr: string): CycleInfo => {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    const month = d.getMonth();
+    const year = d.getFullYear();
+
+    let startDate: Date;
+    let endDate: Date;
+    let label: string;
+    let id: string;
+
+    if (day >= 11 && day <= 25) {
+      startDate = new Date(year, month, 11);
+      endDate = new Date(year, month, 25);
+      label = `11 - 25 ${startDate.toLocaleString('default', { month: 'short' })} ${year}`;
+      id = `${year}-${String(month + 1).padStart(2, '0')}-C1`;
+    } else {
+      if (day >= 26) {
+        startDate = new Date(year, month, 26);
+        const nextMonth = new Date(year, month + 1, 10);
+        endDate = nextMonth;
+      } else {
+        startDate = new Date(year, month - 1, 26);
+        endDate = new Date(year, month, 10);
+      }
+      label = `${startDate.toLocaleString('default', { month: 'short' })} 26 - ${endDate.toLocaleString('default', { month: 'short' })} 10 (${endDate.getFullYear()})`;
+      id = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-C2`;
+    }
+
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    return { id, label, startDate, endDate };
+  };
+
   const stats = useMemo(() => {
     const months: Record<string, { count: number; totalTat: number; countWithTat: number }> = {};
     const dailyStats: Record<string, { worked: number; queried: number }> = {};
+    const dailyUniqueFiles: Record<string, Set<string>> = {};
+    const cycleGroups: Record<string, { info: CycleInfo; files: Manuscript[] }> = {};
     const workDates = new Set<string>();
     let totalWorked = 0;
     
@@ -34,35 +83,43 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
       return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     };
 
+    const addToFileSet = (dateStr: string, id: string) => {
+      const d = dateStr.split('T')[0];
+      if (!dailyUniqueFiles[d]) dailyUniqueFiles[d] = new Set();
+      dailyUniqueFiles[d].add(id);
+    };
+
     manuscripts.forEach(m => {
       // 1. Monthly Stats (Worked only)
       if (m.status === Status.WORKED) {
-        // Robust Date Selection: explicit completedDate -> status change -> updated -> received
         const workDate = m.completedDate || m.dateStatusChanged || m.dateUpdated || m.dateReceived;
-        const key = getMonthKey(workDate);
+        const monthKey = getMonthKey(workDate);
         
-        if (key) {
-            if (!months[key]) {
-              months[key] = { count: 0, totalTat: 0, countWithTat: 0 };
+        if (monthKey) {
+            if (!months[monthKey]) {
+              months[monthKey] = { count: 0, totalTat: 0, countWithTat: 0 };
             }
-            
-            months[key].count += 1;
+            months[monthKey].count += 1;
             totalWorked++;
 
-            // Calculate Turnaround Time (TAT)
             const start = new Date(m.dateReceived).getTime();
             const end = new Date(workDate).getTime();
-            
             if (!isNaN(start) && !isNaN(end)) {
                 const days = Math.max(0, (end - start) / (1000 * 3600 * 24));
-                months[key].totalTat += days;
-                months[key].countWithTat += 1;
+                months[monthKey].totalTat += days;
+                months[monthKey].countWithTat += 1;
             }
         }
+
+        // 2. Cycle Grouping
+        const cycle = getCycleForDate(workDate);
+        if (!cycleGroups[cycle.id]) {
+          cycleGroups[cycle.id] = { info: cycle, files: [] };
+        }
+        cycleGroups[cycle.id].files.push(m);
       }
 
-      // 2. Daily Stats (Worked & Queried)
-      // WORKED
+      // 3. Daily Stats Tracking
       if (m.status === Status.WORKED) {
          const raw = m.completedDate || m.dateStatusChanged || m.dateUpdated;
          if (raw) {
@@ -70,28 +127,26 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
              if (!dailyStats[d]) dailyStats[d] = { worked: 0, queried: 0 };
              dailyStats[d].worked++;
              workDates.add(d);
+             addToFileSet(raw, m.id);
          }
       }
       
-      // QUERIED (Pending JM/TL/CED) - New Robust Logic
-      // Priority 1: Use persistent dateQueried if available (Handles resolved queries)
       if (m.dateQueried) {
-         const d = m.dateQueried.split('T')[0];
-         if (!dailyStats[d]) dailyStats[d] = { worked: 0, queried: 0 };
-         dailyStats[d].queried++;
-      } 
-      // Priority 2: Fallback for old data - use current status date if currently pending
-      else if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
+         const dStr = m.dateQueried.split('T')[0];
+         if (!dailyStats[dStr]) dailyStats[dStr] = { worked: 0, queried: 0 };
+         dailyStats[dStr].queried++;
+         addToFileSet(m.dateQueried, m.id);
+      } else if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
          const raw = m.dateStatusChanged || m.dateUpdated;
          if (raw) {
-            const d = raw.split('T')[0];
-            if (!dailyStats[d]) dailyStats[d] = { worked: 0, queried: 0 };
-            dailyStats[d].queried++;
+            const dStr = raw.split('T')[0];
+            if (!dailyStats[dStr]) dailyStats[dStr] = { worked: 0, queried: 0 };
+            dailyStats[dStr].queried++;
+            addToFileSet(raw, m.id);
          }
       }
     });
 
-    // --- Process Monthly Data ---
     const chartData = Object.entries(months)
       .map(([key, data]) => ({
         key,
@@ -99,141 +154,113 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
         count: data.count,
         avgTat: data.countWithTat > 0 ? parseFloat((data.totalTat / data.countWithTat).toFixed(1)) : 0
       }))
-      .sort((a, b) => a.key.localeCompare(b.key)); // Sort chronologically
-
-    const topMonth = [...chartData].sort((a, b) => b.count - a.count)[0];
-
-    // Last Month vs Current Month
-    const now = new Date();
-    const currentKey = getMonthKey(now.toISOString());
-    
-    const lastMonthDate = new Date();
-    lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-    const lastMonthKey = getMonthKey(lastMonthDate.toISOString()) || '';
-
-    const currentStats = (currentKey && months[currentKey]) ? months[currentKey] : { count: 0 };
-    const lastStats = (lastMonthKey && months[lastMonthKey]) ? months[lastMonthKey] : { count: 0 };
+      .sort((a, b) => a.key.localeCompare(b.key));
 
     const overallTat = chartData.reduce((acc, curr) => acc + (curr.avgTat * curr.count), 0) / Math.max(1, totalWorked);
 
-    // --- Process Daily Records ---
-    let maxWorkedDay = { date: 'N/A', count: 0 };
-    let maxQueryDay = { date: 'N/A', count: 0 };
+    // Calculate Top Productive Cycle
+    const sortedCyclesByCount = Object.values(cycleGroups)
+      .map(group => ({
+        label: group.info.label,
+        count: group.files.length,
+        id: group.info.id
+      }))
+      .sort((a, b) => b.count - a.count);
+    
+    const topCycle = sortedCyclesByCount[0] || { label: 'N/A', count: 0, id: '' };
 
+    // Daily Records
+    let maxWorkedDay = { date: 'N/A', count: 0 };
+    let maxActivityDay = { date: 'N/A', count: 0 };
     Object.entries(dailyStats).forEach(([date, counts]) => {
         if (counts.worked > maxWorkedDay.count) maxWorkedDay = { date, count: counts.worked };
-        if (counts.queried > maxQueryDay.count) maxQueryDay = { date, count: counts.queried };
+    });
+    Object.entries(dailyUniqueFiles).forEach(([date, fileSet]) => {
+        if (fileSet.size > maxActivityDay.count) maxActivityDay = { date, count: fileSet.size };
     });
 
-    // --- Process Streak ---
+    // Streak
     const sortedDates = Array.from(workDates).sort();
     let maxStreak = 0;
     let currentStreak = 0;
     let prevDate: Date | null = null;
-
     sortedDates.forEach(dateStr => {
         const currentDate = new Date(dateStr);
-        // Normalize time
         currentDate.setHours(0,0,0,0);
-
         if (!prevDate) {
             currentStreak = 1;
         } else {
             const diffTime = Math.abs(currentDate.getTime() - prevDate.getTime());
             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)); 
-            
-            if (diffDays === 1) {
-                currentStreak++;
-            } else {
-                currentStreak = 1;
-            }
+            if (diffDays === 1) currentStreak++;
+            else currentStreak = 1;
         }
         if (currentStreak > maxStreak) maxStreak = currentStreak;
         prevDate = currentDate;
     });
 
-    const formatDate = (d: string) => {
-        if (d === 'N/A') return d;
-        try {
-            return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-        } catch {
-            return d;
-        }
-    };
+    // Sorted Cycles for dropdown
+    const sortedCycles = Object.values(cycleGroups).sort((a, b) => b.info.id.localeCompare(a.info.id));
 
     return {
       chartData,
-      topMonth,
+      topCycle,
       totalWorked,
       overallTat: overallTat.toFixed(1),
       maxStreak,
-      comparison: {
-        current: currentStats.count,
-        last: lastStats.count,
-        diff: currentStats.count - lastStats.count,
-        lastMonthLabel: lastMonthKey ? formatLabel(lastMonthKey) : 'Last Month'
-      },
       records: {
-        bestWorked: { ...maxWorkedDay, label: formatDate(maxWorkedDay.date) },
-        mostQueried: { ...maxQueryDay, label: formatDate(maxQueryDay.date) }
-      }
+        bestWorked: { ...maxWorkedDay, label: maxWorkedDay.date !== 'N/A' ? new Date(maxWorkedDay.date).toLocaleDateString() : 'N/A' },
+        peakActivity: { ...maxActivityDay, label: maxActivityDay.date !== 'N/A' ? new Date(maxActivityDay.date).toLocaleDateString() : 'N/A' }
+      },
+      cycleGroups,
+      sortedCycles
     };
   }, [manuscripts]);
+
+  // Set default cycle on load
+  if (stats.sortedCycles.length > 0 && !selectedCycleId) {
+     setSelectedCycleId(stats.sortedCycles[0].info.id);
+  }
 
   return (
     <div className="space-y-8 animate-fade-in-up pb-12">
       
       {/* Header */}
-      <div className="flex flex-col gap-2 border-b border-slate-200 pb-6">
-        <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-          <History className="w-8 h-8 text-indigo-600" />
-          History & Reports
-        </h2>
-        <p className="text-slate-500 text-sm">Historical analysis of your productivity and performance trends.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
+            <History className="w-8 h-8 text-indigo-600" />
+            History & Reports
+          </h2>
+          <p className="text-slate-500 text-sm">Long-term productivity trends and detailed cycle analysis.</p>
+        </div>
+        <button 
+           onClick={() => setIsReconModalOpen(true)}
+           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+        >
+           <ClipboardList className="w-4 h-4" />
+           Reconcile Billing
+        </button>
       </div>
 
       {/* Hero Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Top Productive Month */}
         <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
              <Trophy className="w-24 h-24" />
           </div>
           <div className="relative z-10">
-            <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider mb-3">Top Productive Month</p>
+            <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider mb-3">Top Productive Cycle</p>
             <div className="flex items-end gap-2">
-              <h3 className="text-4xl font-bold">{stats.topMonth?.count || 0}</h3>
+              <h3 className="text-4xl font-bold">{stats.topCycle.count}</h3>
               <span className="text-indigo-200 text-sm mb-1 font-medium">files completed</span>
             </div>
             <p className="mt-3 text-sm font-semibold bg-white/20 inline-block px-3 py-1 rounded-lg backdrop-blur-sm">
-              {stats.topMonth?.label || 'N/A'}
+              {stats.topCycle.label}
             </p>
           </div>
         </div>
 
-        {/* Last Month Report */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
-           <div className="flex justify-between items-start mb-4">
-              <div>
-                 <p className="text-slate-400 font-bold uppercase text-xs tracking-wider">Last Month ({stats.comparison.lastMonthLabel})</p>
-                 <h3 className="text-3xl font-bold text-slate-800 mt-2">{stats.comparison.last}</h3>
-              </div>
-              <div className="p-3 bg-slate-100 rounded-xl group-hover:bg-slate-200 transition-colors">
-                 <Calendar className="w-6 h-6 text-slate-500" />
-              </div>
-           </div>
-           
-           <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
-              <span className="text-sm text-slate-500 font-medium">Vs Current Month:</span>
-              <span className={`flex items-center text-sm font-bold ${stats.comparison.diff >= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                 {stats.comparison.diff > 0 ? '+' : ''}{stats.comparison.diff}
-                 {stats.comparison.diff >= 0 ? <ArrowUpRight className="w-4 h-4 ml-1" /> : <ArrowDownRight className="w-4 h-4 ml-1" />}
-              </span>
-           </div>
-        </div>
-
-         {/* Total Lifetime */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
            <div className="flex justify-between items-start mb-4">
               <div>
@@ -251,60 +278,107 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
               </span>
            </div>
         </div>
-      </div>
 
-      {/* All-Time Records Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow hover:border-orange-200 group">
-             <div className="p-4 bg-orange-50 rounded-full shrink-0 group-hover:bg-orange-100 transition-colors">
-                <Flame className="w-8 h-8 text-orange-600" />
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow hover:border-indigo-200 group">
+             <div className="p-4 bg-indigo-50 rounded-full shrink-0 group-hover:bg-indigo-100 transition-colors">
+                <LayoutGrid className="w-8 h-8 text-indigo-600" />
              </div>
              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Best Day (Worked)</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Peak Activity (1 Day)</p>
                 <div className="flex items-baseline gap-2 mt-1">
-                   <h3 className="text-2xl font-bold text-slate-800">{stats.records.bestWorked.count} files</h3>
-                </div>
-                <p className="text-xs text-slate-500 font-medium truncate mt-1" title={stats.records.bestWorked.label}>
-                    {stats.records.bestWorked.label}
-                </p>
-             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow hover:border-rose-200 group">
-             <div className="p-4 bg-rose-50 rounded-full shrink-0 group-hover:bg-rose-100 transition-colors">
-                <Search className="w-8 h-8 text-rose-600" />
-             </div>
-             <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Most Queries (1 Day)</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                   <h3 className="text-2xl font-bold text-slate-800">{stats.records.mostQueried.count} queries</h3>
-                </div>
-                <p className="text-xs text-slate-500 font-medium truncate mt-1" title={stats.records.mostQueried.label}>
-                    {stats.records.mostQueried.label}
-                </p>
-             </div>
-          </div>
-
-           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow hover:border-blue-200 group">
-             <div className="p-4 bg-blue-50 rounded-full shrink-0 group-hover:bg-blue-100 transition-colors">
-                <Zap className="w-8 h-8 text-blue-600" />
-             </div>
-             <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Longest Streak</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                   <h3 className="text-2xl font-bold text-slate-800">{stats.maxStreak} days</h3>
+                   <h3 className="text-2xl font-bold text-slate-800">{stats.records.peakActivity.count} files</h3>
                 </div>
                 <p className="text-xs text-slate-500 font-medium truncate mt-1">
-                   Consecutive working days
+                    {stats.records.peakActivity.label}
                 </p>
              </div>
           </div>
+      </div>
+
+      {/* Cycle History Table (Now full width and prominent) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-page-enter">
+         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+               <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                  <FileSearch className="w-5 h-5" />
+               </div>
+               <div>
+                  <h3 className="font-bold text-slate-800">Cycle Worked History</h3>
+                  <p className="text-xs text-slate-500 font-medium">Detailed breakdown of files handled per cycle</p>
+               </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+               <label className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:block">Filter Cycle:</label>
+               <select 
+                  className="text-sm border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 py-2 px-3 font-semibold text-slate-700 min-w-[200px]"
+                  value={selectedCycleId}
+                  onChange={(e) => setSelectedCycleId(e.target.value)}
+               >
+                  {stats.sortedCycles.map(c => (
+                     <option key={c.info.id} value={c.info.id}>{c.info.label} ({c.files.length} files)</option>
+                  ))}
+               </select>
+            </div>
+         </div>
+         
+         <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+            <table className="w-full text-sm text-center">
+               <thead className="bg-slate-50/80 text-slate-500 font-bold text-[11px] uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
+                  <tr>
+                     <th className="px-6 py-4">Manuscript ID</th>
+                     <th className="px-6 py-4">Journal</th>
+                     <th className="px-6 py-4">Received</th>
+                     <th className="px-6 py-4">Completed</th>
+                     <th className="px-6 py-4">Performance</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {!selectedCycleId || stats.cycleGroups[selectedCycleId]?.files.length === 0 ? (
+                     <tr>
+                        <td colSpan={5} className="px-6 py-24 text-center text-slate-400">
+                           <div className="flex flex-col items-center gap-2">
+                              <Search className="w-8 h-8 opacity-20" />
+                              <p>No records found for this cycle.</p>
+                           </div>
+                        </td>
+                     </tr>
+                  ) : (
+                     stats.cycleGroups[selectedCycleId].files.map((m) => {
+                        const start = new Date(m.dateReceived).getTime();
+                        const end = new Date(m.completedDate || m.dateStatusChanged || '').getTime();
+                        const tat = Math.max(0, (end - start) / (1000 * 3600 * 24)).toFixed(1);
+                        const isFast = parseFloat(tat) <= 1;
+
+                        return (
+                           <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
+                              <td className="px-6 py-4 font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{m.manuscriptId}</td>
+                              <td className="px-6 py-4 text-slate-500 font-mono text-[11px] uppercase tracking-tighter">{m.journalCode}</td>
+                              <td className="px-6 py-4 text-slate-600 font-medium">{new Date(m.dateReceived).toLocaleDateString()}</td>
+                              <td className="px-6 py-4">
+                                 <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+                                    {new Date(m.completedDate || m.dateStatusChanged || '').toLocaleDateString()}
+                                 </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                 <div className="flex justify-center items-center gap-2">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isFast ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                                       {tat}d TAT
+                                    </span>
+                                    {isFast && <Zap className="w-3 h-3 text-indigo-400 fill-indigo-400" />}
+                                 </div>
+                              </td>
+                           </tr>
+                        );
+                     })
+                  )}
+               </tbody>
+            </table>
+         </div>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Monthly Productivity Chart */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
@@ -317,25 +391,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
               </div>
               <p className="text-xs text-slate-500 mt-1">Total manuscripts completed per month.</p>
            </div>
-
            <div className="h-[300px] w-full flex-1 min-h-[300px]">
               {stats.chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                    <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis 
-                         dataKey="label" 
-                         axisLine={false} 
-                         tickLine={false} 
-                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                         interval="preserveStartEnd"
-                      />
-                      <YAxis 
-                         axisLine={false} 
-                         tickLine={false} 
-                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                         width={30}
-                      />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
                       <Tooltip 
                          cursor={{fill: '#f8fafc'}}
                          content={({ active, payload, label }) => {
@@ -352,7 +414,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                       />
                       <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={50} isAnimationActive={false}>
                          {stats.chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.key === stats.topMonth?.key ? '#6366f1' : '#cbd5e1'} />
+                            <Cell key={`cell-${index}`} fill={entry.count >= 30 ? '#6366f1' : '#cbd5e1'} />
                          ))}
                       </Bar>
                    </BarChart>
@@ -361,34 +423,11 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
                    <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
                    <p className="text-sm font-medium">No history data available yet.</p>
-                   <p className="text-xs opacity-75">Mark files as 'Worked' to see charts.</p>
                 </div>
               )}
            </div>
-           
-           {/* Detailed Explanation: Output */}
-           <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-4">
-              <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5 mb-2">
-                 <HelpCircle className="w-3.5 h-3.5 text-slate-400" /> Understanding this Graph
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                 <div>
-                    <span className="font-semibold text-indigo-600 block mb-1">What it tracks</span>
-                    <p className="text-slate-600 leading-relaxed">
-                       The sheer volume of work you finish. Each bar represents the total count of files marked as <span className="font-mono bg-indigo-50 text-indigo-700 px-1 rounded font-bold">WORKED</span> in that month.
-                    </p>
-                 </div>
-                 <div>
-                    <span className="font-semibold text-indigo-600 block mb-1">Why it matters</span>
-                    <p className="text-slate-600 leading-relaxed">
-                       Higher bars mean higher productivity. The <span className="text-indigo-500 font-bold">purple bar</span> highlights your personal best month ever.
-                    </p>
-                 </div>
-              </div>
-           </div>
         </div>
 
-        {/* Turnaround Time Trend */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
            <div className="flex flex-col mb-6">
               <div className="flex items-center justify-between">
@@ -401,25 +440,13 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
               </div>
               <p className="text-xs text-slate-500 mt-1">Average days taken to complete a file.</p>
            </div>
-
            <div className="h-[300px] w-full flex-1 min-h-[300px]">
               {stats.chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                    <LineChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis 
-                         dataKey="label" 
-                         axisLine={false} 
-                         tickLine={false} 
-                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                         interval="preserveStartEnd"
-                      />
-                      <YAxis 
-                         axisLine={false} 
-                         tickLine={false} 
-                         tick={{ fontSize: 11, fill: '#94a3b8' }} 
-                         width={30}
-                      />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
                       <Tooltip 
                          cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
                          content={({ active, payload, label }) => {
@@ -427,108 +454,34 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts }) => {
                                return (
                                   <div className="bg-white border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded-lg shadow-xl">
                                      <p className="font-bold mb-1 border-b border-slate-100 pb-1">{label}</p>
-                                     <p className="flex items-center gap-2 text-sm">
-                                        Avg TAT: <span className="text-amber-600 font-bold">{payload[0].value} days</span>
-                                     </p>
+                                     <p className="flex items-center gap-2 text-sm">Avg TAT: <span className="text-amber-600 font-bold">{payload[0].value} days</span></p>
                                   </div>
                                );
                             }
                             return null;
                          }}
                       />
-                      <Line 
-                         type="monotone" 
-                         dataKey="avgTat" 
-                         stroke="#f59e0b" 
-                         strokeWidth={3} 
-                         dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }}
-                         activeDot={{ r: 6, fill: '#f59e0b' }}
-                         isAnimationActive={false}
-                      />
+                      <Line type="monotone" dataKey="avgTat" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, fill: '#f59e0b' }} isAnimationActive={false} />
                    </LineChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
                    <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
                    <p className="text-sm font-medium">No turnaround data available.</p>
-                   <p className="text-xs opacity-75">Complete more files to track efficiency.</p>
                 </div>
               )}
            </div>
-           
-           {/* Detailed Explanation: Speed */}
-           <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-4">
-              <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5 mb-2">
-                 <HelpCircle className="w-3.5 h-3.5 text-slate-400" /> Understanding this Graph
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                 <div>
-                    <span className="font-semibold text-amber-600 block mb-1">What it tracks</span>
-                    <p className="text-slate-600 leading-relaxed">
-                       Speed. It measures the average gap between <span className="font-mono bg-slate-200 px-1 rounded font-bold">Date Sent</span> and <span className="font-mono bg-slate-200 px-1 rounded font-bold">Date Completed</span> for files finished that month.
-                    </p>
-                 </div>
-                 <div>
-                    <span className="font-semibold text-amber-600 block mb-1">Why it matters</span>
-                    <p className="text-slate-600 leading-relaxed">
-                       <span className="font-bold text-slate-800">Lower is better.</span> A downward line means you are working faster. Spikes often indicate difficult batches or backlog clearing.
-                    </p>
-                 </div>
-              </div>
-           </div>
         </div>
-
       </div>
 
-      {/* Monthly Breakdown Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-         <div className="p-6 border-b border-slate-100 bg-slate-50/30">
-            <h3 className="font-bold text-slate-800">Monthly Detailed Breakdown</h3>
-         </div>
-         <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-               <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider">
-                  <tr>
-                     <th className="px-6 py-4">Month</th>
-                     <th className="px-6 py-4">Files Completed</th>
-                     <th className="px-6 py-4">Avg Turnaround</th>
-                     <th className="px-6 py-4">Performance Tier</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {stats.chartData.length === 0 && (
-                     <tr>
-                        <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
-                           No data available yet. Start completing manuscripts to populate this report.
-                        </td>
-                     </tr>
-                  )}
-                  {[...stats.chartData].reverse().map((row) => (
-                     <tr key={row.key} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-slate-700">{row.label}</td>
-                        <td className="px-6 py-4 text-slate-600">{row.count}</td>
-                        <td className="px-6 py-4 text-slate-600">{row.avgTat} days</td>
-                        <td className="px-6 py-4">
-                           {row.count >= 50 ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-100">
-                                 <Trophy className="w-3.5 h-3.5" /> Elite
-                              </span>
-                           ) : row.count >= 30 ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
-                                 <TrendingUp className="w-3.5 h-3.5" /> High
-                              </span>
-                           ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
-                                 Standard
-                              </span>
-                           )}
-                        </td>
-                     </tr>
-                  ))}
-               </tbody>
-            </table>
-         </div>
-      </div>
+      {isReconModalOpen && (
+         <BillingReconciliationModal 
+            manuscripts={manuscripts}
+            onClose={() => setIsReconModalOpen(false)}
+            sortedCycles={stats.sortedCycles}
+            initialCycleId={selectedCycleId}
+         />
+      )}
     </div>
   );
 };
