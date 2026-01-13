@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Line, Cell } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
@@ -232,7 +233,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     // 2. Urgent Watchlist
     const urgent = manuscripts
-        .filter(m => m.status !== Status.WORKED && m.priority === 'Urgent')
+        .filter(m => m.status !== Status.WORKED && m.status !== Status.BILLED && m.priority === 'Urgent')
         .sort((a, b) => new Date(a.dateReceived).getTime() - new Date(b.dateReceived).getTime())
         .slice(0, 3);
 

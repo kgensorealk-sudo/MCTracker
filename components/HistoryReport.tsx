@@ -185,6 +185,8 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
 
     const totalPotentialPhp = (billedCount + workedCount) * rates.php;
     const totalPotentialUsd = (billedCount + workedCount) * rates.usd;
+    const billedPhp = billedCount * rates.php;
+    const billedUsd = billedCount * rates.usd;
 
     return {
         total: files.length,
@@ -192,7 +194,8 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
         workedCount,
         percentBilled: files.length > 0 ? Math.round((billedCount / files.length) * 100) : 0,
         pendingPhp: workedCount * rates.php,
-        billedPhp: billedCount * rates.php,
+        billedPhp,
+        billedUsd,
         totalPotentialPhp,
         totalPotentialUsd,
         rates,
@@ -276,14 +279,14 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Cycle Payout Card (Replaces Lifetime Earnings) */}
+        {/* Confirmed Cycle Payout Card */}
         <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
           <div className="absolute right-0 top-0 p-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
              <Wallet className="w-24 h-24" />
           </div>
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-               <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider">Estimated Cycle Payout</p>
+               <p className="text-indigo-100 font-bold uppercase text-xs tracking-wider">Confirmed Cycle Payout</p>
                {selectedCycleStats && (
                   <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-white/10">
                      <CalendarDays className="w-3 h-3" /> Payout on {selectedCycleStats.payoutDateStr}
@@ -292,11 +295,11 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             </div>
             <div className="flex items-baseline gap-2">
               <h3 className="text-4xl font-black tracking-tight">
-                ₱{selectedCycleStats ? selectedCycleStats.totalPotentialPhp.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'}
+                ₱{selectedCycleStats ? selectedCycleStats.billedPhp.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2 text-sm font-bold text-indigo-100 bg-black/10 w-fit px-3 py-1 rounded-lg backdrop-blur-sm border border-white/10">
-               <DollarSign className="w-3.5 h-3.5" /> {selectedCycleStats ? selectedCycleStats.totalPotentialUsd.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'} USD
+               <DollarSign className="w-3.5 h-3.5" /> {selectedCycleStats ? selectedCycleStats.billedUsd.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0.00'} USD
             </div>
           </div>
         </div>
