@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, LabelList } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, LabelList } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, Zap, Inbox, TrendingUp, Trophy, Target, Settings, ShieldAlert, Sparkles, CheckCircle, Flame, Calendar, ArrowRight, Gauge } from 'lucide-react';
+import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, CheckCircle, Calendar, Gauge } from 'lucide-react';
 import { calculateXP, calculateLevel, DAILY_QUESTS } from '../services/gamification';
 
 interface DashboardProps {
@@ -167,7 +167,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
               <div className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded uppercase tracking-widest">Studio Workspace</div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v3.0 Strategic Analyst</div>
            </div>
-           <h2 className="text-3xl font-black text-slate-900 tracking-tight">System Oversight</h2>
+           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Welcome, {userName}</h2>
         </div>
         <div className="flex items-center gap-6">
            <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">

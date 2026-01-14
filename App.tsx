@@ -11,7 +11,7 @@ import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail, Upload, Settings, User as UserIcon, Activity } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, Mail, Upload } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { calculateXP, calculateLevel } from './services/gamification';
 
