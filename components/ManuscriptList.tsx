@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown, Zap, Timer, RefreshCcw, Target, Flame } from 'lucide-react';
+import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown, Zap, Timer, RefreshCcw, Target, Flame, History as HistoryIcon } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -33,10 +34,15 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     direction: 'desc'
   });
 
-  // Query Modal State
+  // Modals States
   const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
   const [queryNote, setQueryNote] = useState('');
   const [isQueryModalClosing, setIsQueryModalClosing] = useState(false);
+
+  // Custom Confirmation States
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
+  const [bulkConfirm, setBulkConfirm] = useState<{ isOpen: boolean, status: Status | null }>({ isOpen: false, status: null });
+  const [quickWorkedConfirm, setQuickWorkedConfirm] = useState<{ isOpen: boolean, manuscript: Manuscript | null }>({ isOpen: false, manuscript: null });
 
   useEffect(() => {
     setFilterStatus(activeFilter);
@@ -51,8 +57,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         return d && d.split('T')[0] === today && (m.status === Status.WORKED || m.status === Status.BILLED);
     }).length;
     
-    // Simple quota approximation for the header summary
-    // In a real app we'd pass the actual calculated quota, but we can re-approximate here or just show Worked Today.
     return { workedToday };
   }, [manuscripts]);
 
@@ -181,28 +185,17 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     setSelectedIds(newSelected);
   };
 
-  const handleDirectBulkStatusChange = (status: Status) => {
-    if (window.confirm(`Are you sure you want to mark ${selectedIds.size} items as ${status}?`)) {
-      onBulkUpdate(Array.from(selectedIds), { status });
-      setSelectedIds(new Set());
-    }
-  };
-
+  // Fix: Defined handleReviewBulk to trigger onBulkReview with selected IDs
   const handleReviewBulk = () => {
-    if (onBulkReview) {
+    if (onBulkReview && selectedIds.size > 0) {
       onBulkReview(Array.from(selectedIds));
-      setSelectedIds(new Set());
     }
   };
 
   const handleQuickStatusUpdate = (m: Manuscript, newStatus: Status) => {
-    const now = new Date().toISOString();
     const updates: Partial<Manuscript> = {
       status: newStatus,
-      dateStatusChanged: now,
-      dateUpdated: now,
     };
-    if (newStatus === Status.WORKED) updates.completedDate = now;
     onUpdate(m.id, updates);
   };
 
@@ -213,10 +206,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       return;
     }
     if (action === 'WORKED') {
-      const isConfirmed = window.confirm(`Are you sure you want to mark ${m.manuscriptId} as WORKED?`);
-      if (!isConfirmed) return;
+      setQuickWorkedConfirm({ isOpen: true, manuscript: m });
     }
-    handleQuickStatusUpdate(m, Status.WORKED);
   };
 
   const handleSendEmail = (m: Manuscript) => {
@@ -332,7 +323,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
     return (
       <div className="relative group/hub">
-        {/* Main Badge */}
         <div className={`
           flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border shadow-sm transition-all duration-300 cursor-default whitespace-nowrap
           ${isCongested ? 'animate-pulse ring-2 ring-rose-200' : ''}
@@ -347,8 +337,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           {isCongested ? `Congested: ${current.label}` : current.label}
         </div>
 
-        {/* Hover Quick Switcher */}
-        <div className="absolute left-1/2 -translate-x-1/2 top-0 opacity-0 group-hover/hub:opacity-100 pointer-events-none group-hover/hub:pointer-events-auto transition-all duration-300 z-20 flex bg-white border border-slate-200 rounded-full p-1 shadow-xl translate-y-2 group-hover/hub:translate-y-0">
+        <div className="absolute left-1/2 -translate-x-1/2 top-0 opacity-0 group-hover/hub:opacity-100 pointer-events-none group-hover/hub:pointer-events-auto transition-all duration-300 z-30 flex bg-white border border-slate-200 rounded-full p-1 shadow-xl translate-y-2 group-hover/hub:translate-y-0">
           {(Object.entries(config) as [Status, any][]).map(([s, cfg]) => (
             <button
               key={s}
@@ -389,7 +378,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   return (
     <div className="space-y-4">
-      {/* Mini Shift Summary Bar */}
       <div className="bg-slate-900 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl shadow-slate-200/50 animate-fade-in-up">
          <div className="flex items-center gap-4">
             <div className="p-2 bg-blue-600 rounded-xl">
@@ -415,7 +403,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
          </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in-up">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible relative animate-fade-in-up">
         {selectedIds.size > 0 && (
           <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-6 py-4 shadow-2xl z-50 flex items-center gap-5 animate-fade-in-up border border-white/10 ring-1 ring-black/20">
              <span className="font-bold text-sm whitespace-nowrap px-3 bg-white/10 rounded-lg py-1.5">{selectedIds.size} selected</span>
@@ -424,7 +412,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                <ListChecks className="w-5 h-5" /> Review Items
              </button>
              <div className="h-6 w-px bg-white/20"></div>
-             <button onClick={() => handleDirectBulkStatusChange(Status.BILLED)} className="flex items-center gap-2 hover:text-indigo-300 transition-colors text-sm font-semibold">
+             <button onClick={() => setBulkConfirm({ isOpen: true, status: Status.BILLED })} className="flex items-center gap-2 hover:text-indigo-300 transition-colors text-sm font-semibold">
                <FileCheck className="w-5 h-5" /> Mark Billed
              </button>
              <div className="h-6 w-px bg-white/20"></div>
@@ -543,15 +531,15 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                </p>
             </div>
           )}
-          <table className="w-full text-center text-sm text-slate-600">
+          <table className="w-full text-center text-sm text-slate-600 border-separate border-spacing-0">
             <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 w-10 text-center">
+                <th className="px-6 py-4 w-10 text-center sticky top-0 bg-slate-50/80 z-10">
                   <input type="checkbox" checked={filteredAndSorted.length > 0 && selectedIds.size === filteredAndSorted.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
                 </th>
-                <th className="px-6 py-4 text-center">Interactive Status</th>
+                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Interactive Status</th>
                 <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
                   onClick={() => handleSort('statusDate')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -559,7 +547,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
                   onClick={() => handleSort('manuscriptId')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -567,24 +555,24 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
                   onClick={() => handleSort('dateReceived')}
                 >
                   <div className="flex items-center justify-center gap-1">
                     Date Sent {renderSortIcon('dateReceived')}
                   </div>
                 </th>
-                <th className="px-6 py-4 text-center">Due Date</th>
+                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Due Date</th>
                 <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none"
+                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
                   onClick={() => handleSort('priority')}
                 >
                   <div className="flex items-center justify-center gap-1">
                     Priority {renderSortIcon('priority')}
                   </div>
                 </th>
-                <th className="px-6 py-4 min-w-[200px] text-center">Remarks</th>
-                <th className="px-6 py-4 text-center">Actions</th>
+                <th className="px-6 py-4 min-w-[220px] text-center sticky top-0 bg-slate-50/80 z-10">Remarks History</th>
+                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -602,26 +590,21 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                  const displayDateRaw = (m.status === Status.WORKED || m.status === Status.BILLED) && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
                  const dateObj = new Date(displayDateRaw);
                  const isActivityTodayFlag = isActivityToday(dateObj);
-                 
-                 // Rule: Don't show "Due Today" badge if already Worked or Billed
                  const isDueToday = isTodayDate(m.dueDate) && (m.status !== Status.WORKED && m.status !== Status.BILLED);
-                 
                  const isSelected = selectedIds.has(m.id);
-                 
-                 // Query Duration logic
                  const ageInDays = Math.floor((new Date().getTime() - dateObj.getTime()) / (1000 * 3600 * 24));
 
                  return (
                   <tr key={m.id} className={`group transition-all duration-200 ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'} ${m.status === Status.PENDING_JM ? 'bg-rose-50/10' : ''}`}>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center border-b border-slate-50">
                       <input type="checkbox" checked={isSelected} onChange={() => handleSelectOne(m.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-6 py-4 whitespace-nowrap text-center border-b border-slate-50">
                       <div className="flex justify-center">
                         {getStatusHub(m)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-6 py-4 whitespace-nowrap text-center border-b border-slate-50">
                       <div className="flex flex-col items-center">
                         <span className={`text-[10px] font-bold ${isActivityTodayFlag ? 'text-blue-600' : 'text-slate-500'}`}>
                           {dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -633,14 +616,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center border-b border-slate-50">
                       <div className="flex flex-col gap-0.5 items-center">
                         <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{m.manuscriptId}</span>
                         <span className="text-slate-400 text-[10px] font-mono">{m.journalCode}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center text-slate-700">{new Date(m.dateReceived).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center text-slate-700 border-b border-slate-50">{new Date(m.dateReceived).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-center border-b border-slate-50">
                       <div className="flex flex-col items-center gap-1">
                         <span className={`text-sm ${isDueToday ? 'font-black text-rose-600' : 'text-slate-700'}`}>
                           {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : '—'}
@@ -650,7 +633,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center border-b border-slate-50">
                       <select
                         value={m.priority}
                         onChange={(e) => onUpdate(m.id, { priority: e.target.value as any })}
@@ -665,17 +648,47 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                         <option value="Urgent">URGENT</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center relative group/remarks border-b border-slate-50">
                       <div className="flex flex-col gap-1.5 items-center">
-                        {m.notes.slice(0, 1).map((note) => (
-                          <div key={note.id} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 w-full max-w-[180px]">
-                            <div className="text-[11px] text-slate-600 line-clamp-2 text-center">{note.content}</div>
+                        {m.notes.length > 0 ? (
+                          <div className="relative w-full max-w-[200px] py-1">
+                            <div className="bg-slate-50/80 p-2 rounded-lg border border-slate-100 group-hover/remarks:border-indigo-200 group-hover/remarks:bg-white group-hover/remarks:shadow-sm transition-all cursor-default overflow-hidden">
+                              <div className="text-[11px] text-slate-600 line-clamp-2 text-center leading-relaxed">
+                                {m.notes[0].content}
+                              </div>
+                            </div>
+                            {m.notes.length > 1 && (
+                              <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-black shadow-lg border border-white z-10 transition-transform group-hover/remarks:scale-110">
+                                {m.notes.length}
+                              </div>
+                            )}
+                            
+                            {/* History Panel with Smooth Transition */}
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-72 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-200 opacity-0 invisible scale-95 group-hover/remarks:opacity-100 group-hover/remarks:visible group-hover/remarks:scale-100 transition-all duration-300 z-50 p-5 origin-top text-center overflow-hidden">
+                               <div className="flex items-center justify-center gap-2 mb-4 border-b border-slate-50 pb-3">
+                                  <HistoryIcon className="w-4 h-4 text-indigo-500" />
+                                  <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Remark History</span>
+                               </div>
+                               <div className="space-y-4 max-h-56 overflow-y-auto custom-scrollbar px-1 pr-2">
+                                  {m.notes.map((note, idx) => (
+                                    <div key={note.id} className={`text-left relative pl-3 ${idx !== m.notes.length - 1 ? 'border-l-2 border-slate-100 pb-4' : 'pl-3'}`}>
+                                       <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-indigo-400"></div>
+                                       <p className="text-[11px] text-slate-700 font-semibold leading-relaxed">{note.content}</p>
+                                       <p className="text-[9px] text-slate-400 mt-1 font-bold flex items-center gap-1.5">
+                                          <Clock className="w-2.5 h-2.5" />
+                                          {new Date(note.timestamp).toLocaleDateString()} at {new Date(note.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                       </p>
+                                    </div>
+                                  ))}
+                               </div>
+                            </div>
                           </div>
-                        ))}
-                        {m.notes.length === 0 && <span className="text-[10px] text-slate-300 italic">No remarks</span>}
+                        ) : (
+                          <span className="text-[10px] text-slate-300 italic flex items-center gap-1.5"><MessageSquare className="w-3 h-3" /> No remarks</span>
+                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                    <td className="px-6 py-4 text-center whitespace-nowrap border-b border-slate-50">
                       <div className="flex justify-center items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                         {m.status !== Status.WORKED && m.status !== Status.BILLED && (
                           <>
@@ -687,7 +700,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
                           </>
                         )}
                         <button onClick={() => onEdit(m)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => onDelete(m.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => setDeleteConfirm({ isOpen: true, id: m.id })} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -736,6 +749,47 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           </div>
         </div>
       )}
+
+      {/* Confirmation Modals */}
+      <ConfirmationModal
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Record?"
+        message="This action cannot be undone. All work history for this manuscript will be permanently removed."
+        variant="danger"
+        confirmLabel="Delete Permanently"
+        onConfirm={() => {
+          if (deleteConfirm.id) onDelete(deleteConfirm.id);
+          setDeleteConfirm({ isOpen: false, id: null });
+        }}
+        onCancel={() => setDeleteConfirm({ isOpen: false, id: null })}
+      />
+
+      <ConfirmationModal
+        isOpen={bulkConfirm.isOpen}
+        title="Bulk Update?"
+        message={`Are you sure you want to mark ${selectedIds.size} items as ${bulkConfirm.status?.replace(/_/g, ' ')}?`}
+        variant="primary"
+        confirmLabel="Update Items"
+        onConfirm={() => {
+          if (bulkConfirm.status) onBulkUpdate(Array.from(selectedIds), { status: bulkConfirm.status });
+          setSelectedIds(new Set());
+          setBulkConfirm({ isOpen: false, status: null });
+        }}
+        onCancel={() => setBulkConfirm({ isOpen: false, status: null })}
+      />
+
+      <ConfirmationModal
+        isOpen={quickWorkedConfirm.isOpen}
+        title="Resolve Item?"
+        message={`Mark ${quickWorkedConfirm.manuscript?.manuscriptId} as WORKED/DONE? This will update your daily quota progress.`}
+        variant="success"
+        confirmLabel="Yes, Resolve"
+        onConfirm={() => {
+          if (quickWorkedConfirm.manuscript) handleQuickStatusUpdate(quickWorkedConfirm.manuscript, Status.WORKED);
+          setQuickWorkedConfirm({ isOpen: false, manuscript: null });
+        }}
+        onCancel={() => setQuickWorkedConfirm({ isOpen: false, manuscript: null })}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status, Note } from '../types';
 import { X, Save, Edit2, Trash2, Plus, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface ManuscriptFormProps {
   initialData?: Manuscript;
@@ -33,6 +34,9 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
   
   const [currentNote, setCurrentNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+
+  // Custom Confirmation States
+  const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<{ isOpen: boolean, noteId: string | null }>({ isOpen: false, noteId: null });
 
   useEffect(() => {
     if (initialData) {
@@ -110,16 +114,18 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
     setEditingNoteId(null);
   };
 
-  const handleDeleteNote = (noteId: string) => {
-    if (window.confirm('Are you sure you want to delete this remark?')) {
-      setFormData(prev => ({
-        ...prev,
-        notes: prev.notes?.filter(n => n.id !== noteId) || []
-      }));
-      if (editingNoteId === noteId) {
-        handleCancelEdit();
-      }
+  const executeDeleteNote = () => {
+    const noteId = deleteNoteConfirm.noteId;
+    if (!noteId) return;
+    
+    setFormData(prev => ({
+      ...prev,
+      notes: prev.notes?.filter(n => n.id !== noteId) || []
+    }));
+    if (editingNoteId === noteId) {
+      handleCancelEdit();
     }
+    setDeleteNoteConfirm({ isOpen: false, noteId: null });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -150,7 +156,6 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       notes: formData.notes || [],
     };
     
-    // For save, we usually don't need exit animation, but let's do it for consistency
     setIsClosing(true);
     setTimeout(() => onSave(manuscript), 200);
   };
@@ -362,7 +367,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteNote(note.id)}
+                      onClick={() => setDeleteNoteConfirm({ isOpen: true, noteId: note.id })}
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                       title="Delete Remark"
                     >
@@ -403,6 +408,16 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
             </button>
           </div>
         </form>
+
+        <ConfirmationModal
+          isOpen={deleteNoteConfirm.isOpen}
+          title="Delete Remark?"
+          message="Are you sure you want to remove this remark? This action cannot be undone."
+          variant="danger"
+          confirmLabel="Delete Remark"
+          onConfirm={executeDeleteNote}
+          onCancel={() => setDeleteNoteConfirm({ isOpen: false, noteId: null })}
+        />
       </div>
     </div>
   );

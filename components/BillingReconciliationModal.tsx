@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
 import { X, ClipboardList, AlertTriangle, CheckCircle, ArrowRight, Copy, Search, FileText, ExternalLink, HelpCircle, FileCheck, Globe, Calculator, Coins, TrendingUp, DollarSign, RefreshCcw, HandMetal } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface RateProfile {
   usd: number;
@@ -34,6 +35,9 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [activeTab, setActiveTab] = useState<'matched' | 'missing' | 'extra'>('matched');
   
+  // Custom Confirmation States
+  const [claimConfirm, setClaimConfirm] = useState<{ isOpen: boolean, mId: string | null }>({ isOpen: false, mId: null });
+
   const currentRates = useMemo(() => 
     cycleRates[selectedCycleId] || DEFAULT_RATES, 
   [cycleRates, selectedCycleId]);
@@ -118,15 +122,13 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
     handleClose();
   };
 
-  const handleClaimExtra = (mId: string) => {
-    if (!selectedCycleData) return;
+  const executeClaimExtra = () => {
+    const mId = claimConfirm.mId;
+    if (!mId || !selectedCycleData) return;
+    
     const targetDate = selectedCycleData.info.startDate.toISOString();
-    if (window.confirm(`Claim ${mId} for the ${selectedCycleData.info.label} cycle? This will move its financial credit to this cycle while keeping its work history.`)) {
-        const item = manuscripts.find(m => m.id === mId);
-        if (item) {
-            onBulkUpdate?.([mId], { status: Status.BILLED, billedDate: targetDate });
-        }
-    }
+    onBulkUpdate?.([mId], { status: Status.BILLED, billedDate: targetDate });
+    setClaimConfirm({ isOpen: false, mId: null });
   };
 
   const updateRate = (key: keyof RateProfile, val: number) => {
@@ -359,7 +361,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                                                          </span>
                                                          {item.manuscript && (
                                                             <button 
-                                                               onClick={() => handleClaimExtra(item.manuscript!.id)}
+                                                               onClick={() => setClaimConfirm({ isOpen: true, mId: item.manuscript!.id })}
                                                                className="text-[10px] font-bold text-white bg-amber-500 hover:bg-amber-600 px-2 py-1 rounded-lg flex items-center gap-1.5 transition-all w-fit shadow-sm active:scale-95"
                                                             >
                                                                <HandMetal className="w-3 h-3" /> Claim for This Cycle
@@ -400,6 +402,16 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
               Update Billed Status <ArrowRight className="w-4 h-4" />
            </button>
         </div>
+
+        <ConfirmationModal
+          isOpen={claimConfirm.isOpen}
+          title="Claim for This Cycle?"
+          message={`Are you sure you want to claim this item for the ${selectedCycleData?.info.label} cycle? This will move its financial credit to this period while keeping its work history.`}
+          variant="warning"
+          confirmLabel="Claim Credit"
+          onConfirm={executeClaimExtra}
+          onCancel={() => setClaimConfirm({ isOpen: false, mId: null })}
+        />
       </div>
     </div>
   );

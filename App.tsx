@@ -204,6 +204,25 @@ const App: React.FC = () => {
     }
   };
 
+  const generateAutoRemark = (oldStatus: Status, newStatus: Status): string => {
+    if (newStatus === Status.WORKED) {
+      return oldStatus === Status.PENDING_JM ? "JM Query Resolved / Submitted" : "Done / Submitted";
+    }
+    if (newStatus === Status.PENDING_JM) {
+      return "Queried to JM";
+    }
+    if (newStatus === Status.BILLED) {
+      return "Payment Confirmed / Billed";
+    }
+    if (newStatus === Status.PENDING_TL) {
+      return "Queried to TL";
+    }
+    if (newStatus === Status.PENDING_CED) {
+      return "Emailed to CED";
+    }
+    return "";
+  };
+
   const handleQuickUpdate = async (id: string, updates: Partial<Manuscript>) => {
     const original = manuscripts.find(m => m.id === id);
     if (!original) return;
@@ -217,7 +236,18 @@ const App: React.FC = () => {
 
     updatedManuscript = applyEscalationRule(updatedManuscript);
 
+    // Automatic remark handling for status changes
     if (updates.status && updates.status !== original.status) {
+      const autoRemark = generateAutoRemark(original.status, updates.status);
+      if (autoRemark) {
+        const newNote = {
+          id: crypto.randomUUID(),
+          content: autoRemark,
+          timestamp: Date.now()
+        };
+        updatedManuscript.notes = [newNote, ...original.notes];
+      }
+
       if (updates.status !== Status.BILLED || original.status !== Status.WORKED) {
         updatedManuscript.dateStatusChanged = now;
       }
@@ -241,6 +271,7 @@ const App: React.FC = () => {
     setDataLoading(true);
 
     const now = new Date().toISOString();
+    const updatedItems: Manuscript[] = [];
     
     setManuscripts(prev => prev.map(m => {
       if (!ids.includes(m.id)) return m;
@@ -249,6 +280,16 @@ const App: React.FC = () => {
       item = applyEscalationRule(item);
       
       if (updates.status && updates.status !== m.status) {
+        const autoRemark = generateAutoRemark(m.status, updates.status);
+        if (autoRemark) {
+          const newNote = {
+            id: crypto.randomUUID(),
+            content: autoRemark,
+            timestamp: Date.now()
+          };
+          item.notes = [newNote, ...m.notes];
+        }
+
         if (updates.status !== Status.BILLED || m.status !== Status.WORKED) {
           item.dateStatusChanged = now;
         }
@@ -256,11 +297,16 @@ const App: React.FC = () => {
           item.completedDate = now;
         }
       }
+      updatedItems.push(item);
       return item;
     }));
 
     try {
-      await dataService.updateManuscripts(ids, updates, isOffline);
+      if (updates.status) {
+        await Promise.all(updatedItems.map(item => dataService.updateManuscript(item, isOffline)));
+      } else {
+        await dataService.updateManuscripts(ids, updates, isOffline);
+      }
     } catch (error: any) {
       console.error("Bulk update failed:", error);
       loadData(); 
@@ -278,16 +324,14 @@ const App: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this record?")) {
-      setDataLoading(true);
-      try {
-        await dataService.deleteManuscript(id, isOffline);
-        setManuscripts(prev => prev.filter(m => m.id !== id));
-      } catch (error: any) {
-        console.error("Error deleting:", error);
-      } finally {
-        setDataLoading(false);
-      }
+    setDataLoading(true);
+    try {
+      await dataService.deleteManuscript(id, isOffline);
+      setManuscripts(prev => prev.filter(m => m.id !== id));
+    } catch (error: any) {
+      console.error("Error deleting:", error);
+    } finally {
+      setDataLoading(false);
     }
   };
 
