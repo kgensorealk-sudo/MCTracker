@@ -237,9 +237,10 @@ const App: React.FC = () => {
     updatedManuscript = applyEscalationRule(updatedManuscript);
 
     // Automatic remark handling for status changes
+    // FIX: Only add auto-remark if no custom notes were provided in the updates object
     if (updates.status && updates.status !== original.status) {
       const autoRemark = generateAutoRemark(original.status, updates.status);
-      if (autoRemark) {
+      if (autoRemark && !updates.notes) {
         const newNote = {
           id: crypto.randomUUID(),
           content: autoRemark,
@@ -279,9 +280,10 @@ const App: React.FC = () => {
       let item = { ...m, ...updates, dateUpdated: now };
       item = applyEscalationRule(item);
       
+      // FIX: Only add auto-remark if no custom notes were provided in the updates object
       if (updates.status && updates.status !== m.status) {
         const autoRemark = generateAutoRemark(m.status, updates.status);
-        if (autoRemark) {
+        if (autoRemark && !updates.notes) {
           const newNote = {
             id: crypto.randomUUID(),
             content: autoRemark,
