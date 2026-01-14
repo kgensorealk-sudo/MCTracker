@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, LabelList } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, CheckCircle, Calendar, Gauge, Flame, Zap } from 'lucide-react';
+import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, Gauge, Flame, Zap } from 'lucide-react';
 import { calculateXP, calculateLevel, DAILY_QUESTS } from '../services/gamification';
 
 interface DashboardProps {
