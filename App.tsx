@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Manuscript, Status, UserSchedule } from './types';
 import Dashboard from './components/Dashboard';
 import ManuscriptList from './components/ManuscriptList';
@@ -12,14 +11,16 @@ import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { dataService } from './services/dataService';
-import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail, Upload } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, WifiOff, Mail, Upload, Settings, User as UserIcon, Activity } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
+import { calculateXP, calculateLevel } from './services/gamification';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(!isSupabaseConfigured);
+  const authInitRef = useRef(false);
 
   // Data States
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
@@ -39,6 +40,16 @@ const App: React.FC = () => {
   // Bulk Review Queue State
   const [bulkQueue, setBulkQueue] = useState<string[]>([]);
   const [isBulkReview, setIsBulkReview] = useState(false);
+
+  // Robust Local Date Check
+  const isTodayLocal = (dateString?: string) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() &&
+           d.getMonth() === now.getMonth() &&
+           d.getDate() === now.getDate();
+  };
 
   const enterOfflineMode = () => {
     if (isOffline) return; 
@@ -65,6 +76,9 @@ const App: React.FC = () => {
 
   // Auth & Initial Load
   useEffect(() => {
+    if (authInitRef.current) return;
+    authInitRef.current = true;
+
     const initAuth = async () => {
       if (!isSupabaseConfigured) {
         enterOfflineMode();
@@ -72,19 +86,15 @@ const App: React.FC = () => {
       }
 
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         if (error) throw error;
-        if (session) {
-          setSession(session);
+        if (currentSession) {
+          setSession(currentSession);
         }
         setLoading(false);
       } catch (err: any) {
         console.error("Auth initialization failed:", err);
-        if (err.message?.includes('fetch') || err.name === 'TypeError') {
-          enterOfflineMode();
-        } else {
-          setLoading(false);
-        }
+        enterOfflineMode();
       }
     };
 
@@ -100,7 +110,31 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch Data when Session exists
+  // Priority Escalation Logic
+  const autoEscalate = async (items: Manuscript[]) => {
+    const escalatedIds: string[] = [];
+    const updatedItems = items.map(m => {
+      const isDueToday = isTodayLocal(m.dueDate);
+      const isPendingReview = [Status.UNTOUCHED, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
+      
+      if (isDueToday && isPendingReview && m.priority === 'Normal') {
+        escalatedIds.push(m.id);
+        return { ...m, priority: 'High' as const, dateUpdated: new Date().toISOString() };
+      }
+      return m;
+    });
+
+    if (escalatedIds.length > 0) {
+      try {
+        await dataService.updateManuscripts(escalatedIds, { priority: 'High' as const }, isOffline);
+      } catch (e) {
+        console.error("Auto-escalation sync failed:", e);
+      }
+    }
+    return updatedItems;
+  };
+
+  // Fetch Data
   useEffect(() => {
     if (session) {
       loadData();
@@ -108,6 +142,7 @@ const App: React.FC = () => {
   }, [session, isOffline]);
 
   const loadData = async () => {
+    if (dataLoading) return;
     setDataLoading(true);
     try {
       const [mss, settings] = await Promise.all([
@@ -115,29 +150,39 @@ const App: React.FC = () => {
         dataService.getUserSettings(isOffline)
       ]);
       
-      setManuscripts(mss);
+      const escalatedMss = await autoEscalate(mss || []);
+      setManuscripts(escalatedMss);
       if (settings) {
         setTargetPerCycle(settings.targetPerCycle);
         setUserSchedule(settings.userSchedule);
       }
     } catch (error: any) {
       console.error("Error loading data:", error);
-      if (error.message?.includes('fetch')) {
-        enterOfflineMode();
-      }
     } finally {
       setDataLoading(false);
     }
   };
 
+  const applyEscalationRule = (m: Manuscript): Manuscript => {
+    const isDueToday = isTodayLocal(m.dueDate);
+    const isPendingReview = [Status.UNTOUCHED, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
+    
+    if (isDueToday && isPendingReview && m.priority === 'Normal') {
+      return { ...m, priority: 'High' as const };
+    }
+    return m;
+  };
+
   const handleSave = async (manuscript: Manuscript) => {
     setDataLoading(true);
     try {
+      const processedManuscript = applyEscalationRule(manuscript);
+      
       if (editingId) {
-        const updated = await dataService.updateManuscript(manuscript, isOffline);
+        const updated = await dataService.updateManuscript(processedManuscript, isOffline);
         setManuscripts(prev => prev.map(m => m.id === updated.id ? updated : m));
       } else {
-        const created = await dataService.createManuscript(manuscript, isOffline);
+        const created = await dataService.createManuscript(processedManuscript, isOffline);
         setManuscripts(prev => [created, ...prev]);
       }
       
@@ -153,12 +198,7 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Error saving:", error);
-      if (error.message?.includes('fetch')) {
-        enterOfflineMode();
-        handleSave(manuscript);
-      } else {
-        alert(`Failed to save record: ${error.message || 'Unknown error'}`);
-      }
+      alert(`Failed to save record: ${error.message || 'Unknown error'}`);
     } finally {
       setDataLoading(false);
     }
@@ -169,19 +209,18 @@ const App: React.FC = () => {
     if (!original) return;
 
     const now = new Date().toISOString();
-    const updatedManuscript = { 
+    let updatedManuscript = { 
       ...original, 
       ...updates, 
       dateUpdated: now 
     };
 
+    updatedManuscript = applyEscalationRule(updatedManuscript);
+
     if (updates.status && updates.status !== original.status) {
-      const isReconciling = updates.status === Status.BILLED && original.status === Status.WORKED;
-      
-      if (!isReconciling) {
+      if (updates.status !== Status.BILLED || original.status !== Status.WORKED) {
         updatedManuscript.dateStatusChanged = now;
       }
-
       if ((updatedManuscript.status === Status.WORKED || updatedManuscript.status === Status.BILLED) && !original.completedDate) {
         updatedManuscript.completedDate = now;
       }
@@ -193,12 +232,7 @@ const App: React.FC = () => {
       await dataService.updateManuscript(updatedManuscript, isOffline);
     } catch (error: any) {
       console.error("Quick update failed:", error);
-      if (error.message?.includes('fetch')) {
-        enterOfflineMode();
-      } else {
-        alert(`Failed to update record: ${error.message || 'Unknown error'}`);
-        setManuscripts(prev => prev.map(m => m.id === id ? original : m));
-      }
+      setManuscripts(prev => prev.map(m => m.id === id ? original : m));
     }
   };
 
@@ -211,35 +245,25 @@ const App: React.FC = () => {
     setManuscripts(prev => prev.map(m => {
       if (!ids.includes(m.id)) return m;
       
-      const itemUpdates: any = { 
-        ...updates, 
-        dateUpdated: now 
-      };
+      let item = { ...m, ...updates, dateUpdated: now };
+      item = applyEscalationRule(item);
       
       if (updates.status && updates.status !== m.status) {
-        const isReconciling = updates.status === Status.BILLED && m.status === Status.WORKED;
-        if (!isReconciling) {
-          itemUpdates.dateStatusChanged = now;
+        if (updates.status !== Status.BILLED || m.status !== Status.WORKED) {
+          item.dateStatusChanged = now;
         }
-
         if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
-          itemUpdates.completedDate = now;
+          item.completedDate = now;
         }
       }
-
-      return { ...m, ...itemUpdates };
+      return item;
     }));
 
     try {
       await dataService.updateManuscripts(ids, updates, isOffline);
     } catch (error: any) {
       console.error("Bulk update failed:", error);
-      if (error.message?.includes('fetch')) {
-        enterOfflineMode();
-      } else {
-        alert(`Failed to update multiple records: ${error.message || 'Unknown error'}`);
-        loadData(); 
-      }
+      loadData(); 
     } finally {
       setDataLoading(false);
     }
@@ -254,19 +278,13 @@ const App: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this record? This action cannot be undone.")) {
+    if (window.confirm("Are you sure you want to delete this record?")) {
       setDataLoading(true);
       try {
         await dataService.deleteManuscript(id, isOffline);
         setManuscripts(prev => prev.filter(m => m.id !== id));
       } catch (error: any) {
         console.error("Error deleting:", error);
-        if (error.message?.includes('fetch')) {
-          enterOfflineMode();
-          handleDelete(id);
-        } else {
-          alert(`Failed to delete record: ${error.message || 'Unknown error'}`);
-        }
       } finally {
         setDataLoading(false);
       }
@@ -278,7 +296,8 @@ const App: React.FC = () => {
     try {
       const createdItems: Manuscript[] = [];
       for (const item of newItems) {
-        const created = await dataService.createManuscript(item, isOffline);
+        const processed = applyEscalationRule(item);
+        const created = await dataService.createManuscript(processed, isOffline);
         createdItems.push(created);
       }
       setManuscripts(prev => [...createdItems, ...prev]);
@@ -286,12 +305,6 @@ const App: React.FC = () => {
       setView('list'); 
     } catch (error: any) {
       console.error("Bulk import failed:", error);
-      if (error.message?.includes('fetch')) {
-        enterOfflineMode();
-        loadData();
-      } else {
-        alert(`Some items failed to import: ${error.message || 'Error'}`);
-      }
     } finally {
       setDataLoading(false);
     }
@@ -300,19 +313,16 @@ const App: React.FC = () => {
   const handleUpdateTarget = (target: number) => {
     setTargetPerCycle(target);
     dataService.updateTarget(target, isOffline).catch(err => {
-      if (err.message?.includes('fetch')) enterOfflineMode();
+      const msg = err.message?.toLowerCase() || '';
+      if (msg.includes('fetch') || msg.includes('aborted')) enterOfflineMode();
     });
   };
 
   const handleUpdateSchedule = (schedule: UserSchedule) => {
     setUserSchedule(schedule);
     dataService.updateSchedule(schedule, isOffline).catch((err: any) => {
-      console.error("Schedule sync failed:", err);
-      if (err.message?.includes('fetch')) {
-        enterOfflineMode();
-      } else if (err.message && (err.message.includes('weekly_weights') || err.message.includes('column'))) {
-         alert("Database schema mismatch detected. Please go to 'Dev Setup' (database icon) and run the updated SQL script.");
-      }
+      const msg = err.message?.toLowerCase() || '';
+      if (msg.includes('fetch') || msg.includes('aborted')) enterOfflineMode();
     });
   };
 
@@ -323,7 +333,6 @@ const App: React.FC = () => {
       await dataService.updateManuscripts(ids, { dateEmailed: now }, isOffline);
     } catch (error: any) {
       console.error("Failed to mark reported:", error);
-      if (error.message?.includes('fetch')) enterOfflineMode();
     }
   };
 
@@ -361,7 +370,6 @@ const App: React.FC = () => {
     } else {
       window.location.reload();
     }
-    setManuscripts([]);
   };
 
   const getEditingData = () => {
@@ -381,6 +389,7 @@ const App: React.FC = () => {
 
   const user = session?.user;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Analyst';
+  const levelData = calculateLevel(calculateXP(manuscripts, targetPerCycle));
 
   if (loading) {
     return (
@@ -396,95 +405,115 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative">
-      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 to-transparent -z-10 pointer-events-none"></div>
+      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-indigo-50/40 to-transparent -z-10 pointer-events-none"></div>
 
-      <header className="glass border-b border-slate-200/60 sticky top-0 z-30 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-black/5">
+      {/* Modern Improved Header */}
+      <div className="h-[2px] w-full bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-500 sticky top-0 z-50"></div>
+      <header className="glass border-b border-slate-200/60 sticky top-[2px] z-40 transition-all duration-300 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          
+          {/* Logo & Status Cluster */}
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl shadow-lg shadow-indigo-200 ring-1 ring-white/20 transition-transform hover:scale-110 active:scale-95 cursor-pointer">
               <ShieldCheck className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden sm:block">MasterCopy <span className="text-blue-600">Tracker</span></h1>
-            {dataLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin ml-2" />}
-            {isOffline && (
-              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700 ml-2 animate-pulse">
-                 <WifiOff className="w-3 h-3" /> Offline Mode
+            <div className="hidden lg:block">
+              <h1 className="text-xl font-black text-slate-800 tracking-tight leading-tight">MasterCopy <span className="text-indigo-600">Analyst</span></h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${isOffline ? 'bg-amber-400' : 'bg-emerald-500 pulse-glow'}`}></div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isOffline ? 'Offline Sync' : 'Live Workspace'}</span>
               </div>
-            )}
+            </div>
+            {dataLoading && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin ml-2" />}
           </div>
           
-          <div className="flex items-center gap-4">
-            <nav className="flex bg-slate-100/50 p-1 rounded-xl border border-slate-200/50">
-              <button 
-                onClick={() => handleViewChange('dashboard')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'dashboard' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-              >
-                <div className="flex items-center gap-2"><LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Overview</span></div>
-              </button>
-              <button 
-                onClick={() => handleViewChange('list')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'list' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-              >
-                <div className="flex items-center gap-2"><List className="w-4 h-4" /> <span className="hidden sm:inline">Files</span></div>
-              </button>
-              <button 
-                onClick={() => handleViewChange('history')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${view === 'history' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-              >
-                <div className="flex items-center gap-2"><History className="w-4 h-4" /> <span className="hidden sm:inline">Reports</span></div>
-              </button>
-            </nav>
+          {/* Central Navigation Cluster */}
+          <nav className="flex items-center bg-slate-100/60 p-1.5 rounded-2xl border border-slate-200/50 backdrop-blur-md shadow-inner mx-4">
+            <button 
+              onClick={() => handleViewChange('dashboard')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'dashboard' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'}`}
+            >
+              <LayoutDashboard className="w-4 h-4" /> <span className="hidden xl:inline">Overview</span>
+            </button>
+            <button 
+              onClick={() => handleViewChange('list')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'list' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'}`}
+            >
+              <List className="w-4 h-4" /> <span className="hidden xl:inline">Worklog</span>
+            </button>
+            <button 
+              onClick={() => handleViewChange('history')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'history' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'}`}
+            >
+              <History className="w-4 h-4" /> <span className="hidden xl:inline">Analytics</span>
+            </button>
+          </nav>
+          
+          {/* Action & Profile Cluster */}
+          <div className="flex items-center gap-6">
             
-            <div className="hidden md:flex flex-col items-end mr-2 pl-4 border-l border-slate-200">
-                <span className="text-sm font-semibold text-slate-800 leading-tight">{userName}</span>
-                <button 
-                  onClick={() => setIsGamificationOpen(true)}
-                  className="text-[10px] text-blue-600 uppercase tracking-wider font-bold hover:underline"
-                >
-                  View Rewards
-                </button>
-            </div>
-
-            <div className="flex gap-2">
+            {/* Action Buttons Group */}
+            <div className="hidden sm:flex items-center gap-2 pr-6 border-r border-slate-200">
                <button
                 onClick={() => setIsReportOpen(true)}
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-                title="Email Daily Report"
+                className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all hover:scale-110 active:scale-95"
+                title="Daily Report"
               >
-                <Mail className="w-4 h-4" />
-                <span className="hidden xl:inline">Daily Report</span>
-              </button>
-              <button
-                onClick={() => setIsDevOpen(true)}
-                className="bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-                title="Developer Settings"
-              >
-                <Database className="w-4 h-4" />
+                <Mail className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setIsGamificationOpen(true)}
-                className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
+                className="p-2.5 text-slate-500 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all hover:scale-110 active:scale-95"
+                title="Achievements"
               >
-                <Trophy className="w-4 h-4" />
+                <Trophy className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setIsImportOpen(true)}
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-                title="Import from Spreadsheet"
+                className="p-2.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all hover:scale-110 active:scale-95"
+                title="Bulk Import"
               >
-                <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+                <Upload className="w-5 h-5" />
               </button>
+              <button
+                onClick={() => setIsDevOpen(true)}
+                className="p-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all hover:scale-110 active:scale-95"
+                title="Database Settings"
+              >
+                <Database className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Profile & CTA Group */}
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex flex-col items-end">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-slate-800 leading-tight">{userName}</span>
+                    <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-slate-900 text-white text-[10px] font-black shadow-sm">
+                      {levelData.level}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsGamificationOpen(true)}
+                    className="text-[9px] text-indigo-600 uppercase tracking-[0.15em] font-black hover:underline"
+                  >
+                    Level Progress
+                  </button>
+              </div>
+
               <button
                 onClick={() => { setEditingId(null); setIsFormOpen(true); }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-2xl text-sm font-black flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all hover:scale-105 active:scale-95"
               >
-                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Log Work</span>
+                <Plus className="w-4 h-4" /> <span className="hidden md:inline">Log New Work</span>
               </button>
+
               <button
                 onClick={handleSignOut}
-                className="bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow"
+                className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all active:scale-95 border border-transparent hover:border-rose-100"
+                title="Sign Out"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -511,6 +540,7 @@ const App: React.FC = () => {
               onUpdate={handleQuickUpdate}
               onBulkUpdate={handleBulkUpdate}
               onBulkReview={handleBulkReview}
+              onRefresh={loadData}
               activeFilter={listFilter}
             />
           ) : (

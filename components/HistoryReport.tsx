@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
-import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays, Calendar } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Line, Area, ComposedChart, Scatter, Dot } from 'recharts';
+import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays, Calendar, Activity } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
@@ -23,6 +23,22 @@ interface RateProfile {
 }
 
 const DEFAULT_RATES: RateProfile = { usd: 1.19, php: 70.41 };
+
+// Custom Pulsing Dot Component
+const PulsingDot = (props: any) => {
+  const { cx, cy, payload, index, dataLength } = props;
+  if (index !== dataLength - 1) return <Dot cx={cx} cy={cy} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={2} />;
+
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={8} fill="#f59e0b" opacity="0.3">
+        <animate attributeName="r" from="4" to="12" dur="1.5s" repeatCount="indefinite" />
+        <animate attributeName="opacity" from="0.3" to="0" dur="1.5s" repeatCount="indefinite" />
+      </circle>
+      <circle cx={cx} cy={cy} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={2} />
+    </g>
+  );
+};
 
 const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate }) => {
   const [selectedCycleId, setSelectedCycleId] = useState<string>('');
@@ -393,27 +409,27 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
             </div>
         </div>
 
-        {/* Calendar Month Performance - AREA CHART */}
+        {/* Calendar Month Performance - PULSE COMPOSED CHART */}
         <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-8">
                 <div>
                     <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2.5">
-                        <Calendar className="w-6 h-6 text-slate-500" /> Calendar Month Output
+                        <Activity className="w-6 h-6 text-emerald-500" /> Pulse: Volume Intensity
                     </h3>
-                    <p className="text-sm text-slate-500 mt-1 font-medium">Items grouped by standard calendar month (1st - 31st)</p>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Activity density overlay across calendar periods</p>
                 </div>
-                <div className="p-2.5 bg-slate-50 rounded-2xl">
-                   <TrendingUp className="w-5 h-5 text-slate-400" />
+                <div className="p-2.5 bg-emerald-50 rounded-2xl">
+                   <TrendingUp className="w-5 h-5 text-emerald-500" />
                 </div>
             </div>
             <div className="h-[300px] w-full">
                 {stats.monthlyChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <ComposedChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
-                                <linearGradient id="monthGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#64748b" stopOpacity={0.2}/>
-                                    <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
+                                <linearGradient id="pulseGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -423,12 +439,12 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                                 content={({ active, payload, label }) => {
                                     if (active && payload && payload.length) {
                                         return (
-                                            <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xl text-xs">
-                                                <p className="font-black mb-2 text-slate-400 uppercase tracking-widest text-[10px]">{label} Overview</p>
-                                                <p className="text-xl font-black text-slate-800">{payload[0].value} <span className="text-[10px] text-slate-400 font-bold">FILES HANDLED</span></p>
-                                                <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-2 text-slate-500">
+                                            <div className="bg-slate-900 border border-slate-700 p-4 rounded-2xl shadow-xl text-xs text-white">
+                                                <p className="font-black mb-2 text-emerald-400 uppercase tracking-widest text-[10px]">{label} Intensity</p>
+                                                <p className="text-xl font-black">{payload[0].value} <span className="text-[10px] text-slate-400 font-bold uppercase">Files Secure</span></p>
+                                                <div className="mt-2 pt-2 border-t border-slate-800 flex items-center gap-2 text-slate-400 italic">
                                                    <Clock className="w-3 h-3" />
-                                                   <span>Avg Speed: <b>{payload[0].payload.avgTat} days</b></span>
+                                                   <span>Cycle Latency: <b>{payload[0].payload.avgTat} days</b></span>
                                                 </div>
                                             </div>
                                         );
@@ -436,16 +452,134 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                                     return null;
                                 }}
                             />
-                            <Area type="monotone" dataKey="count" stroke="#64748b" strokeWidth={4} fillOpacity={1} fill="url(#monthGradient)" isAnimationActive={false} dot={{ r: 4, fill: '#fff', stroke: '#64748b', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#64748b' }} />
-                        </AreaChart>
+                            <Area type="monotone" dataKey="count" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#pulseGradient)" isAnimationActive={false} />
+                            <Bar dataKey="count" barSize={8} fill="#10b981" radius={[4, 4, 0, 0]} opacity={0.3} />
+                        </ComposedChart>
                     </ResponsiveContainer>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
-                        <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
+                        <Activity className="w-8 h-8 mb-2 opacity-30" />
                         <p className="text-sm font-medium">Add completed files to see calendar trends.</p>
                     </div>
                 )}
             </div>
+        </div>
+      </div>
+
+      {/* Confirmation Area Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Earnings History (Stepped Area Pulse) */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-indigo-500" /> Revenue Stepped Pulse
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Block-style earnings progression per cycle</p>
+                </div>
+            </div>
+            <div className="h-[280px] w-full">
+                {stats.cycleChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="earnGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} height={40} angle={-5} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} hide />
+                            <Tooltip 
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xl text-xs">
+                                                <p className="font-bold mb-2 text-slate-500 border-b border-slate-100 pb-1">{label}</p>
+                                                <p className="text-lg font-black text-indigo-600">₱{payload[0].value?.toLocaleString()}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">{payload[0].payload.billedCount} Billed Items</p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Area type="stepAfter" dataKey="earnings" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#earnGradient)" isAnimationActive={false} />
+                            <Scatter dataKey="earnings" fill="#4f46e5" />
+                        </ComposedChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                        <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Add billed files to see earnings history.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* Speed Trend (Stepped Composed Heartbeat) */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+           <div className="flex flex-col mb-6">
+              <div className="flex items-center justify-between">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-amber-500" /> Digital TAT Heartbeat
+                 </h3>
+                 <div className="px-2.5 py-1 rounded-md bg-amber-50 text-[10px] font-black text-amber-600 uppercase tracking-widest border border-amber-100">
+                    Step Output
+                 </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Sequential performance latency tracking.</p>
+           </div>
+           <div className="h-[280px] w-full">
+              {stats.monthlyChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                   <ComposedChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="tatGradient" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
+                           <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
+                      <Tooltip 
+                         cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                         content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                               return (
+                                  <div className="bg-slate-900 border border-slate-700 text-white text-xs py-2.5 px-4 rounded-xl shadow-2xl">
+                                     <p className="font-bold mb-1 border-b border-white/10 pb-1 text-slate-400 uppercase tracking-wider text-[10px]">{label}</p>
+                                     <p className="flex items-center gap-2 text-sm mt-1">
+                                        <Activity className="w-3 h-3 text-amber-500" />
+                                        TAT Latency: <span className="text-amber-500 font-black">{payload[0].value} days</span>
+                                     </p>
+                                  </div>
+                               );
+                            }
+                            return null;
+                         }}
+                      />
+                      <Area type="stepAfter" dataKey="avgTat" stroke="none" fill="url(#tatGradient)" />
+                      <Line 
+                        type="stepAfter" 
+                        dataKey="avgTat" 
+                        stroke="#f59e0b" 
+                        strokeWidth={4} 
+                        dot={<PulsingDot dataLength={stats.monthlyChartData.length} />} 
+                        activeDot={{ r: 6, fill: '#f59e0b' }} 
+                        isAnimationActive={false} 
+                      />
+                   </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                   <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+                   <p className="text-sm font-medium">No turnaround data available.</p>
+                </div>
+              )}
+           </div>
         </div>
       </div>
 
@@ -579,104 +713,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ manuscripts, onBulkUpdate
                </tbody>
             </table>
          </div>
-      </div>
-
-      {/* Confirmation Area Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Earnings History (Area) */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-emerald-500" /> Confirmed Earnings History
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">PHP payout from BILLED items per cycle</p>
-                </div>
-            </div>
-            <div className="h-[280px] w-full">
-                {stats.cycleChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={stats.cycleChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="earnGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} height={40} angle={-5} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} hide />
-                            <Tooltip 
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                        return (
-                                            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xl text-xs">
-                                                <p className="font-bold mb-2 text-slate-500 border-b border-slate-100 pb-1">{label}</p>
-                                                <p className="text-lg font-black text-emerald-600">₱{payload[0].value?.toLocaleString()}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">{payload[0].payload.billedCount} Billed Items</p>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
-                            />
-                            <Area type="monotone" dataKey="earnings" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#earnGradient)" isAnimationActive={false} />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                        <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
-                        <p className="text-sm font-medium">Add billed files to see earnings history.</p>
-                    </div>
-                )}
-            </div>
-        </div>
-
-        {/* Speed Trend (Line) */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition-shadow">
-           <div className="flex flex-col mb-6">
-              <div className="flex items-center justify-between">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-amber-500" /> Efficiency Metric
-                 </h3>
-                 <div className="px-2.5 py-1 rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Speed Metric
-                 </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Average days taken to complete a file.</p>
-           </div>
-           <div className="h-[280px] w-full">
-              {stats.monthlyChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} interval="preserveStartEnd" />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} width={30} />
-                      <Tooltip 
-                         cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
-                         content={({ active, payload, label }) => {
-                            if (active && payload && payload.length) {
-                               return (
-                                  <div className="bg-white border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded-lg shadow-xl">
-                                     <p className="font-bold mb-1 border-b border-slate-100 pb-1">{label}</p>
-                                     <p className="flex items-center gap-2 text-sm">Avg TAT: <span className="text-amber-600 font-bold">{payload[0].value} days</span></p>
-                                  </div>
-                               );
-                            }
-                            return null;
-                         }}
-                      />
-                      <Line type="monotone" dataKey="avgTat" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, fill: '#f59e0b' }} isAnimationActive={false} />
-                   </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                   <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
-                   <p className="text-sm font-medium">No turnaround data available.</p>
-                </div>
-              )}
-           </div>
-        </div>
       </div>
 
       {isReconModalOpen && (

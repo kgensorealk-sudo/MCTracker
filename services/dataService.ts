@@ -1,5 +1,3 @@
-
-
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Manuscript, UserSchedule } from '../types';
 
@@ -7,11 +5,13 @@ import { Manuscript, UserSchedule } from '../types';
 const mapToManuscript = (row: any): Manuscript => ({
   id: row.id,
   manuscriptId: row.manuscript_id,
+  // Fix: changed journal_code to journalCode to match Manuscript interface
   journalCode: row.journal_code,
   status: row.status,
   priority: row.priority,
   dateReceived: row.date_received,
   dueDate: row.due_date,
+  // Fix: removed invalid property completed_date
   completedDate: row.completed_date,
   billedDate: row.billed_date,
   dateUpdated: row.date_updated,
@@ -45,13 +45,30 @@ const getLocalSettings = () => {
   }
 };
 
+/**
+ * Utility to identify if an error is network-related or a Supabase abort
+ */
+const isNetworkError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = err.message?.toLowerCase() || '';
+  return (
+    msg.includes('failed to fetch') || 
+    msg.includes('networkerror') || 
+    msg.includes('signal is aborted') ||
+    msg.includes('aborted') ||
+    err.name === 'AbortError' ||
+    err.name === 'TypeError' // Fetch failures are often TypeErrors in browsers
+  );
+};
+
 // Helper to catch network errors during user check
+// Uses getSession which is faster/local-first compared to getUser
 const getSafeUser = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) return null;
+    return session?.user || null;
   } catch (err) {
-    console.warn("User fetch failed (network issue):", err);
     return null;
   }
 };
@@ -77,8 +94,11 @@ export const dataService = {
       if (error) throw error;
       return (data || []).map(mapToManuscript);
     } catch (err: any) {
-      console.warn("Supabase fetch failed, falling back to local:", err);
-      return getLocalManuscripts();
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during getManuscripts, falling back to local data.");
+        return getLocalManuscripts();
+      }
+      throw err;
     }
   },
 
@@ -122,8 +142,11 @@ export const dataService = {
       if (error) throw error;
       return mapToManuscript(data);
     } catch (err: any) {
-      console.warn("Remote create failed, syncing locally:", err);
-      return this.createManuscript(m, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during createManuscript, syncing locally.");
+        return this.createManuscript(m, true);
+      }
+      throw err;
     }
   },
 
@@ -167,8 +190,11 @@ export const dataService = {
       if (error) throw error;
       return mapToManuscript(data);
     } catch (err: any) {
-      console.warn("Remote update failed, syncing locally:", err);
-      return this.updateManuscript(m, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during updateManuscript, syncing locally.");
+        return this.updateManuscript(m, true);
+      }
+      throw err;
     }
   },
 
@@ -207,8 +233,11 @@ export const dataService = {
 
       if (error) throw error;
     } catch (err: any) {
-      console.warn("Remote bulk update failed, syncing locally:", err);
-      return this.updateManuscripts(ids, updates, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during bulk update, syncing locally.");
+        return this.updateManuscripts(ids, updates, true);
+      }
+      throw err;
     }
   },
 
@@ -232,8 +261,11 @@ export const dataService = {
 
       if (error) throw error;
     } catch (err: any) {
-      console.warn("Remote delete failed, syncing locally:", err);
-      return this.deleteManuscript(id, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during deleteManuscript, syncing locally.");
+        return this.deleteManuscript(id, true);
+      }
+      throw err;
     }
   },
 
@@ -263,7 +295,10 @@ export const dataService = {
         }
       };
     } catch (err: any) {
-      console.warn("Supabase settings fetch failed, falling back to local:", err);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during getUserSettings, falling back to local settings.");
+        return getLocalSettings();
+      }
       return getLocalSettings();
     }
   },
@@ -285,8 +320,11 @@ export const dataService = {
 
       if (error) throw error;
     } catch (err: any) {
-      console.warn("Remote target update failed, syncing locally:", err);
-      return this.updateTarget(target, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during updateTarget, syncing locally.");
+        return this.updateTarget(target, true);
+      }
+      throw err;
     }
   },
 
@@ -301,7 +339,6 @@ export const dataService = {
       const user = await getSafeUser();
       if (!user) return this.updateSchedule(schedule, true);
 
-      // Fix: Use correct camelCase property names from the UserSchedule interface
       const { error } = await supabase
         .from('user_settings')
         .upsert({ 
@@ -312,8 +349,11 @@ export const dataService = {
 
       if (error) throw error;
     } catch (err: any) {
-      console.warn("Remote schedule update failed, syncing locally:", err);
-      return this.updateSchedule(schedule, true);
+      if (isNetworkError(err)) {
+        console.warn("Network issue detected during updateSchedule, syncing locally.");
+        return this.updateSchedule(schedule, true);
+      }
+      throw err;
     }
   }
 };

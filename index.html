@@ -6,7 +6,7 @@
     <title>MasterCopy Analyst Tracker</title>
     <!-- Tailwind CSS (CDN is fine for simple setup) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
       body {
         font-family: 'Inter', sans-serif;
@@ -66,6 +66,12 @@
         to { opacity: 0; backdrop-filter: blur(0px); }
       }
 
+      @keyframes pulseGlow {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+        70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+      }
+
       /* Classes */
       .animate-fade-in-up { 
         animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
@@ -75,6 +81,10 @@
         animation: pageEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
       
+      .pulse-glow {
+        animation: pulseGlow 2s infinite;
+      }
+
       /* Modal Classes */
       .modal-backdrop-enter {
         animation: backdropEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
@@ -100,8 +110,8 @@
       /* Glass utilities */
       .glass {
         background: rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
         border-bottom: 1px solid rgba(255, 255, 255, 0.5);
       }
     </style>
