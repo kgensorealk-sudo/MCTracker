@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertTriangle, HelpCircle, CheckCircle, Info } from 'lucide-react';
+import { AlertTriangle, HelpCircle, CheckCircle } from 'lucide-react';
 
 export type ConfirmationVariant = 'danger' | 'primary' | 'warning' | 'success';
 
