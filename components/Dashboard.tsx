@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, LabelList } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, CheckCircle, Calendar, Gauge } from 'lucide-react';
+import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, CheckCircle, Calendar, Gauge, Flame, Zap } from 'lucide-react';
 import { calculateXP, calculateLevel, DAILY_QUESTS } from '../services/gamification';
 
 interface DashboardProps {
@@ -158,6 +158,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
 
   const todayQuota = strategy.dailyForecast[0]?.count || 0;
   const quotaProgress = todayQuota > 0 ? Math.round((stats.workedToday / todayQuota) * 100) : 100;
+  const isTargetAchieved = stats.workedToday >= todayQuota && todayQuota > 0;
 
   return (
     <div className="space-y-6 pb-12">
@@ -190,44 +191,86 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
         </div>
       </div>
 
-      {/* Daily Momentum Stat Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in-up">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-emerald-200 transition-all">
-           <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
-              <CheckCircle className="w-6 h-6" />
+      {/* Hero Shift Progress Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in-up">
+        {/* Worked Today Gauge */}
+        <div className="md:col-span-2 bg-slate-900 rounded-[2rem] p-8 text-white shadow-2xl shadow-slate-200 relative overflow-hidden flex flex-col justify-between h-64 border border-slate-800">
+           <div className="absolute right-0 top-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
+           <div className="absolute left-0 bottom-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -ml-24 -mb-24"></div>
+           
+           <div className="relative flex justify-between items-start">
+              <div>
+                 <div className="flex items-center gap-2 mb-2">
+                    <div className="px-2 py-0.5 bg-blue-500 text-[10px] font-black rounded uppercase tracking-widest text-white">Daily Performance</div>
+                    {isTargetAchieved && <div className="px-2 py-0.5 bg-emerald-500 text-[10px] font-black rounded uppercase tracking-widest text-white flex items-center gap-1"><Flame className="w-3 h-3" /> Target Met</div>}
+                 </div>
+                 <h3 className="text-4xl font-black tracking-tighter">Shift Momentum</h3>
+                 <p className="text-slate-400 text-sm mt-1 font-medium max-w-xs">Your real-time productivity progress for the current working session.</p>
+              </div>
+              <div className="text-right">
+                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Status</p>
+                 <div className="flex items-center gap-2 justify-end">
+                    <span className={`text-2xl font-black ${isTargetAchieved ? 'text-emerald-400' : 'text-blue-400'}`}>{quotaProgress}%</span>
+                 </div>
+              </div>
            </div>
-           <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Worked Today</p>
-              <h4 className="text-2xl font-black text-slate-900 leading-tight">{stats.workedToday}</h4>
-           </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-indigo-200 transition-all">
-           <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform">
-              <Target className="w-6 h-6" />
-           </div>
-           <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Today's Quota</p>
-              <h4 className="text-2xl font-black text-slate-900 leading-tight">{todayQuota}</h4>
-           </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-amber-200 transition-all">
-           <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
-              <Gauge className="w-6 h-6" />
-           </div>
-           <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Quota Progress</p>
-              <div className="flex items-baseline gap-1">
-                <h4 className={`text-2xl font-black leading-tight ${quotaProgress >= 100 ? 'text-emerald-600' : 'text-slate-900'}`}>{quotaProgress}%</h4>
+
+           <div className="relative mt-8">
+              <div className="flex justify-between items-end mb-4">
+                 <div className="flex gap-12">
+                    <div className="group cursor-help">
+                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Worked Today</p>
+                       <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-black text-white">{stats.workedToday}</span>
+                          <span className="text-slate-500 font-bold">files</span>
+                       </div>
+                    </div>
+                    <div className="group cursor-help">
+                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Today's Quota</p>
+                       <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-black text-slate-300">{todayQuota}</span>
+                          <span className="text-slate-500 font-bold">goal</span>
+                       </div>
+                    </div>
+                 </div>
+                 <div className="flex flex-col items-end">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Remaining</p>
+                    <span className="text-2xl font-black text-indigo-400">{Math.max(0, todayQuota - stats.workedToday)}</span>
+                 </div>
+              </div>
+              <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden p-1 border border-slate-700 shadow-inner">
+                 <div 
+                    className={`h-full rounded-full transition-all duration-1000 shadow-lg ${isTargetAchieved ? 'bg-gradient-to-r from-emerald-400 to-teal-500 shadow-emerald-500/20' : 'bg-gradient-to-r from-blue-500 to-indigo-500 shadow-blue-500/20'}`} 
+                    style={{ width: `${Math.min(100, quotaProgress)}%` }}
+                 ></div>
               </div>
            </div>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-blue-200 transition-all">
-           <div className="p-3 bg-blue-50 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
-              <Calendar className="w-6 h-6" />
+
+        {/* Dynamic Context Card */}
+        <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-indigo-100 transition-all">
+           <div className="flex justify-between items-start">
+              <div className="p-4 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
+                 <Gauge className="w-8 h-8" />
+              </div>
+              <div className="text-right">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cycle Projection</p>
+                 <h4 className="text-2xl font-black text-slate-900 leading-tight">{stats.cycleWorked} / {target}</h4>
+              </div>
            </div>
-           <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Cycle Workload</p>
-              <h4 className="text-2xl font-black text-slate-900 leading-tight">{stats.cycleWorked} / {target}</h4>
+           
+           <div className="mt-6 space-y-4">
+              <div className="flex items-center gap-3">
+                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                 <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">{cycle.workingDaysLeft} days remaining in cycle</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 group-hover:bg-indigo-50/30 transition-colors">
+                 <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recommended Pace</span>
+                 </div>
+                 <p className="text-lg font-black text-slate-800 leading-none">{strategy.idealVelocity.toFixed(1)} <span className="text-xs text-slate-400 ml-1">items/day</span></p>
+              </div>
            </div>
         </div>
       </div>
