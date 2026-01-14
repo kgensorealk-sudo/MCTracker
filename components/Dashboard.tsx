@@ -370,7 +370,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
                             position="top" 
                             offset={8} 
                             style={{ fontSize: '10px', fontWeight: '800', fill: '#0f172a' }}
-                            formatter={(val: number) => val > 0 ? val : ''}
+                            formatter={(val: any) => (Number(val) > 0 ? val : '')}
                           />
                        </Bar>
                     </BarChart>

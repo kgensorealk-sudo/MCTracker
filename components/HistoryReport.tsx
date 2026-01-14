@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Manuscript, Status } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Line, Area, ComposedChart, Scatter, Dot } from 'recharts';
-import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays, Calendar, Activity } from 'lucide-react';
+import { TrendingUp, Clock, FileText, History, Search, ClipboardList, FileSearch, AlertCircle, BarChart3, Coins, DollarSign, Wallet, Settings2, AlertTriangle, CheckCircle, FileCheck, CalendarDays, Activity } from 'lucide-react';
 import BillingReconciliationModal from './BillingReconciliationModal';
 
 interface HistoryReportProps {
