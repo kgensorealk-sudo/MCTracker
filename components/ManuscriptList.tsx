@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown, Zap, ChevronRight, Timer, RefreshCcw } from 'lucide-react';
+import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown, Zap, Timer, RefreshCcw } from 'lucide-react';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -271,7 +271,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   const downloadCSV = () => {
     const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
     const rows = filteredAndSorted.map(m => {
-      const notesContent = m.notes.map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`).join('; ');
+      const headers_content = m.notes.map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`).join('; ');
       let submittedDate = '';
       if (m.status === Status.WORKED || m.status === Status.BILLED) {
           const rawDate = m.completedDate || m.dateStatusChanged || m.dateUpdated;
@@ -283,7 +283,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         m.manuscriptId, m.journalCode, new Date(m.dateReceived).toLocaleDateString(),
         m.dueDate ? new Date(m.dueDate).toLocaleDateString() : '',
         m.status, statusDate, submittedDate, m.priority,
-        `"${notesContent.replace(/"/g, '""')}"`
+        `"${headers_content.replace(/"/g, '""')}"`
       ];
     });
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');

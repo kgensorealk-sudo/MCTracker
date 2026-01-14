@@ -26,7 +26,7 @@ const DEFAULT_RATES: RateProfile = { usd: 1.19, php: 70.41 };
 
 // Custom Pulsing Dot Component
 const PulsingDot = (props: any) => {
-  const { cx, cy, payload, index, dataLength } = props;
+  const { cx, cy, index, dataLength } = props;
   if (index !== dataLength - 1) return <Dot cx={cx} cy={cy} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={2} />;
 
   return (
