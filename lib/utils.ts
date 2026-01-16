@@ -9,6 +9,14 @@ export const isTodayDate = (dateString?: string) => {
          d.getDate() === now.getDate();
 };
 
+export const isSameDate = (dateString: string | undefined, targetDate: Date) => {
+  if (!dateString) return false;
+  const d = new Date(dateString);
+  return d.getFullYear() === targetDate.getFullYear() &&
+         d.getMonth() === targetDate.getMonth() &&
+         d.getDate() === targetDate.getDate();
+};
+
 export const isActivityToday = (date: Date) => {
   const today = new Date();
   return date.getDate() === today.getDate() &&

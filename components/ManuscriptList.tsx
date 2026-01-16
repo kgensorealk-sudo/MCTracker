@@ -5,6 +5,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { ManuscriptFilters } from './ManuscriptFilters';
 import { ManuscriptTable } from './ManuscriptTable';
 import { QueryModal } from './QueryModal';
+import { EmailModal } from './EmailModal';
 import { useManuscriptList } from '../hooks/useManuscriptList';
 
 interface ManuscriptListProps {
@@ -91,9 +92,21 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         subject = `Follow-up: ${m.manuscriptId}`;
         body = `Hi,\n\nChecking in on the status of ${m.manuscriptId}.\n\nThanks.`;
     }
-    const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailtoUrl, '_blank');
-    onUpdate(m.id, { dateEmailed: new Date().toISOString() });
+    
+    setEmailModal({
+      isOpen: true,
+      recipient,
+      subject,
+      body,
+      manuscriptId: m.id
+    });
+  };
+
+  const handleMarkSent = () => {
+    if (emailModal.manuscriptId) {
+      onUpdate(emailModal.manuscriptId, { dateEmailed: new Date().toISOString() });
+      setEmailModal(prev => ({ ...prev, isOpen: false }));
+    }
   };
 
   const handleSubmitQuery = (note: string) => {
@@ -228,6 +241,15 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         manuscript={queryModal.manuscript} 
         onClose={() => setQueryModal({ isOpen: false, manuscript: null })} 
         onSubmit={handleSubmitQuery} 
+      />
+
+      <EmailModal
+        isOpen={emailModal.isOpen}
+        recipient={emailModal.recipient}
+        subject={emailModal.subject}
+        body={emailModal.body}
+        onClose={() => setEmailModal(prev => ({ ...prev, isOpen: false }))}
+        onMarkSent={handleMarkSent}
       />
 
       {/* Confirmation Modals */}
