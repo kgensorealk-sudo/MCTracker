@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Manuscript, Status } from '../types';
-import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, Target, Flame } from 'lucide-react';
+import { ListChecks, FileCheck, Target, Flame, X } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import { ManuscriptFilters } from './ManuscriptFilters';
 import { ManuscriptTable } from './ManuscriptTable';

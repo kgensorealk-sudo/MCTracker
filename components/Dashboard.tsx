@@ -66,7 +66,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
 
   // 2. INTELLIGENT STATISTICS
   const stats = useMemo(() => {
-    const now = new Date();
     const inCycle = (ds?: string) => ds && new Date(ds) >= cycle.start && new Date(ds) <= cycle.end;
     
     const workedItems = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.BILLED);
