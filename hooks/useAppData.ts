@@ -265,16 +265,6 @@ export const useAppData = () => {
     });
   };
 
-  const handleMarkReported = async (ids: string[]) => {
-    const now = new Date().toISOString();
-    setManuscripts(prev => prev.map(m => ids.includes(m.id) ? { ...m, dateEmailed: now } : m));
-    try {
-      await dataService.updateManuscripts(ids, { dateEmailed: now }, isOffline);
-    } catch (error: any) {
-      console.error("Failed to mark reported:", error);
-    }
-  };
-
   const handleSignOut = async () => {
     if (isSupabaseConfigured && !isOffline) {
       try {
@@ -300,7 +290,6 @@ export const useAppData = () => {
     handleDelete,
     handleUpdateTarget,
     handleUpdateSchedule,
-    handleMarkReported,
     handleQuickUpdate,
     handleBulkUpdate,
     handleBulkImport,

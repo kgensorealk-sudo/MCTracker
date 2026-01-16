@@ -26,7 +26,6 @@ const App: React.FC = () => {
     handleDelete,
     handleUpdateTarget,
     handleUpdateSchedule,
-    handleMarkReported,
     handleQuickUpdate,
     handleBulkUpdate,
     handleBulkImport: appDataBulkImport,
