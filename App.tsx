@@ -7,9 +7,8 @@ import BulkImportModal from './components/BulkImportModal';
 import GamificationHub from './components/AchievementsModal'; 
 import DeveloperGuideModal from './components/DeveloperGuideModal';
 import HistoryReport from './components/HistoryReport';
-import DailyReportModal from './components/DailyReportModal';
 import { Auth } from './components/Auth';
-import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, Mail, Upload } from 'lucide-react';
+import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, Database, Trophy, History, Upload } from 'lucide-react';
 import { calculateXP, calculateLevel } from './services/gamification';
 import { useAppData } from './hooks/useAppData';
 
@@ -41,7 +40,7 @@ const App: React.FC = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isGamificationOpen, setIsGamificationOpen] = useState(false);
   const [isDevOpen, setIsDevOpen] = useState(false);
-  const [isReportOpen, setIsReportOpen] = useState(false);
+  // Daily report removed
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Bulk Review Queue State
@@ -185,13 +184,7 @@ const App: React.FC = () => {
             
             {/* Action Buttons Group */}
             <div className="hidden sm:flex items-center gap-2 pr-6 border-r border-slate-200">
-               <button
-                onClick={() => setIsReportOpen(true)}
-                className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all hover:scale-110 active:scale-95"
-                title="Daily Report"
-              >
-                <Mail className="w-5 h-5" />
-              </button>
+              {/* Daily Report removed */}
               <button
                 onClick={() => setIsGamificationOpen(true)}
                 className="p-2.5 text-slate-500 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all hover:scale-110 active:scale-95"
@@ -318,13 +311,7 @@ const App: React.FC = () => {
         />
       )}
 
-      {isReportOpen && (
-        <DailyReportModal
-          manuscripts={manuscripts}
-          onClose={() => setIsReportOpen(false)}
-          onMarkReported={handleMarkReported}
-        />
-      )}
+      {/* Daily Report modal removed */}
     </div>
   );
 };

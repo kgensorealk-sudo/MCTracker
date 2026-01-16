@@ -5,7 +5,6 @@ import ConfirmationModal from './ConfirmationModal';
 import { ManuscriptFilters } from './ManuscriptFilters';
 import { ManuscriptTable } from './ManuscriptTable';
 import { QueryModal } from './QueryModal';
-import { EmailModal } from './EmailModal';
 import { useManuscriptList } from '../hooks/useManuscriptList';
 
 interface ManuscriptListProps {
@@ -36,18 +35,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   // Modals States
   const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
-  const [emailModal, setEmailModal] = useState<{
-    isOpen: boolean;
-    recipient: string;
-    subject: string;
-    body: string;
-    manuscriptId?: string;
-  }>({
-    isOpen: false,
-    recipient: '',
-    subject: '',
-    body: ''
-  });
+  // Email modal removed
   
   // Custom Confirmation States
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
@@ -78,59 +66,9 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
-  const lastFocusEl = React.useRef<HTMLElement | null>(null);
+  // Email send removed
 
-  const handleSendEmail = (m: Manuscript, triggerEl: HTMLElement) => {
-    lastFocusEl.current = triggerEl;
-    let recipient = '';
-    let subject = '';
-    let body = '';
-    const lastNote = m.notes[0]?.content || "N/A";
-    switch(m.status) {
-      case Status.PENDING_JM:
-        recipient = 'JM_CONTACT@publisher.com';
-        subject = `Query: ${m.manuscriptId} - ${m.journalCode}`;
-        body = `Hi JM Team,\n\nRegarding manuscript ${m.manuscriptId} (${m.journalCode}), I have a query:\n\n${lastNote}\n\nPlease let me know how to proceed.\n\nRegards,\nAnalyst`;
-        break;
-      case Status.PENDING_TL:
-        recipient = 'TL_CONTACT@publisher.com';
-        subject = `TL Assistance Required: ${m.manuscriptId}`;
-        body = `Hi Team,\n\nI need TL assistance for ${m.manuscriptId}.\n\nContext:\n${lastNote}\n\nThanks!`;
-        break;
-      case Status.PENDING_CED:
-        recipient = 'CED_CONTACT@publisher.com';
-        subject = `Urgent Escalation: ${m.manuscriptId}`;
-        body = `Hi CED,\n\nEscalating manuscript ${m.manuscriptId} for status review.\n\nPriority: ${m.priority}\nLast Note: ${lastNote}\n\nBest,`;
-        break;
-      default:
-        recipient = '';
-        subject = `Follow-up: ${m.manuscriptId}`;
-        body = `Hi,\n\nChecking in on the status of ${m.manuscriptId}.\n\nThanks.`;
-    }
-    
-    setEmailModal({
-      isOpen: true,
-      recipient,
-      subject,
-      body,
-      manuscriptId: m.id
-    });
-  };
-
-  const closeEmailModal = () => {
-    setEmailModal(prev => ({ ...prev, isOpen: false }));
-    // Restore focus to the triggering element
-    setTimeout(() => {
-      lastFocusEl.current?.focus();
-    }, 0);
-  };
-
-  const handleMarkSent = () => {
-    if (emailModal.manuscriptId) {
-      onUpdate(emailModal.manuscriptId, { dateEmailed: new Date().toISOString() });
-      closeEmailModal();
-    }
-  };
+  // Email mark sent removed
 
   const handleSubmitQuery = (note: string) => {
     if (!queryModal.manuscript) return;
@@ -253,7 +191,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           filterStatus={filterStatus}
           search={search}
           onQuickAction={handleQuickAction}
-          onSendEmail={handleSendEmail}
           onEdit={onEdit}
           onDelete={(id) => setDeleteConfirm({ isOpen: true, id })}
         />
@@ -265,15 +202,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         onClose={() => setQueryModal({ isOpen: false, manuscript: null })} 
         onSubmit={handleSubmitQuery} 
       />
-
-      <EmailModal
-        isOpen={emailModal.isOpen}
-        recipient={emailModal.recipient}
-        subject={emailModal.subject}
-        body={emailModal.body}
-        onClose={closeEmailModal}
-        onMarkSent={handleMarkSent}
-      />
+      {/* Email modal removed */}
 
       {/* Confirmation Modals */}
       <ConfirmationModal
