@@ -3,6 +3,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Ba
 import { Manuscript, Status, UserSchedule } from '../types';
 import { AlertCircle, Inbox, TrendingUp, Target, Settings, ShieldAlert, Sparkles, Gauge, Flame, Zap } from 'lucide-react';
 import { calculateXP, calculateLevel, DAILY_QUESTS } from '../services/gamification';
+import { isTodayDate } from '../lib/utils';
 
 interface DashboardProps {
   userName: string;
