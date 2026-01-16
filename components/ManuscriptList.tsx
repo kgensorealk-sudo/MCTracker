@@ -78,7 +78,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     }
   };
 
-  const handleSendEmail = (m: Manuscript) => {
+  const lastFocusEl = React.useRef<HTMLElement | null>(null);
+
+  const handleSendEmail = (m: Manuscript, triggerEl: HTMLElement) => {
+    lastFocusEl.current = triggerEl;
     let recipient = '';
     let subject = '';
     let body = '';
@@ -114,10 +117,18 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     });
   };
 
+  const closeEmailModal = () => {
+    setEmailModal(prev => ({ ...prev, isOpen: false }));
+    // Restore focus to the triggering element
+    setTimeout(() => {
+      lastFocusEl.current?.focus();
+    }, 0);
+  };
+
   const handleMarkSent = () => {
     if (emailModal.manuscriptId) {
       onUpdate(emailModal.manuscriptId, { dateEmailed: new Date().toISOString() });
-      setEmailModal(prev => ({ ...prev, isOpen: false }));
+      closeEmailModal();
     }
   };
 
@@ -260,7 +271,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         recipient={emailModal.recipient}
         subject={emailModal.subject}
         body={emailModal.body}
-        onClose={() => setEmailModal(prev => ({ ...prev, isOpen: false }))}
+        onClose={closeEmailModal}
         onMarkSent={handleMarkSent}
       />
 

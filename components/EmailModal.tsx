@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Copy, Check, Mail, Send } from 'lucide-react';
 
 interface EmailModalProps {
@@ -19,6 +19,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({
   body 
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const initialFocusRef = useRef<HTMLButtonElement | null>(null);
 
   if (!isOpen) return null;
 
@@ -32,6 +33,11 @@ export const EmailModal: React.FC<EmailModalProps> = ({
     onMarkSent();
     onClose();
   };
+
+  useEffect(() => {
+    // Move focus to modal primary action when opened
+    initialFocusRef.current?.focus();
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -118,6 +124,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({
           </button>
           <button 
             onClick={handleSend}
+            ref={initialFocusRef}
             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 flex items-center gap-2 transition-all active:scale-95"
           >
             <Send className="w-4 h-4" />

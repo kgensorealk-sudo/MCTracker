@@ -14,7 +14,7 @@ interface ManuscriptTableProps {
   filterStatus: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER';
   search: string;
   onQuickAction: (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => void;
-  onSendEmail: (m: Manuscript) => void;
+  onSendEmail: (m: Manuscript, triggerEl: HTMLElement) => void;
   onEdit: (m: Manuscript) => void;
   onDelete: (id: string) => void;
 }
@@ -266,7 +266,7 @@ export const ManuscriptTable: React.FC<ManuscriptTableProps> = ({
                   <div className="flex justify-center items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                     {m.status !== Status.WORKED && m.status !== Status.BILLED && (
                       <>
-                        <button onClick={() => onSendEmail(m)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all" title="Email Query"><Send className="w-4 h-4" /></button>
+                        <button onClick={(e) => onSendEmail(m, e.currentTarget)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all" title="Email Query"><Send className="w-4 h-4" /></button>
                         {m.status !== Status.PENDING_JM && (
                           <button onClick={() => onQuickAction(m, 'QUERY_JM')} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-all" title="Query JM"><AlertCircle className="w-4 h-4" /></button>
                         )}
