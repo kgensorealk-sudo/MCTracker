@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Manuscript, Status } from '../types';
 import { Search, Edit2, AlertCircle, CheckCircle, Clock, Download, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ListChecks, Calendar, Filter, MessageSquare, Send, FileCheck, ArrowUpDown, ArrowUp, ArrowDown, Zap, Timer, RefreshCcw, Target, Flame, History as HistoryIcon } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
+import { ManuscriptFilters } from './ManuscriptFilters';
+import { ManuscriptTable } from './ManuscriptTable';
+import { QueryModal } from './QueryModal';
+import { useManuscriptList } from '../hooks/useManuscriptList';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -14,176 +18,28 @@ interface ManuscriptListProps {
   activeFilter: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER';
 }
 
-type SortKey = 'status' | 'manuscriptId' | 'dateReceived' | 'priority' | 'statusDate';
-type SortDirection = 'asc' | 'desc' | null;
-
 const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkReview, onRefresh, activeFilter }) => {
-  const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER'>(activeFilter);
-  const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showDateFilters, setShowDateFilters] = useState(false);
-  const [dateRange, setDateRange] = useState({ 
-    start: '', 
-    end: '', 
-    field: 'dateReceived' 
-  });
-
-  // Sorting State
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
-    key: 'statusDate',
-    direction: 'desc'
-  });
+  const {
+    filterStatus, setFilterStatus,
+    search, setSearch,
+    selectedIds, setSelectedIds,
+    showDateFilters, setShowDateFilters,
+    dateRange, setDateRange,
+    sortConfig, handleSort,
+    filteredAndSorted,
+    dailyStats,
+    counts,
+    handleSelectAll,
+    handleSelectOne
+  } = useManuscriptList({ manuscripts, activeFilter });
 
   // Modals States
   const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
-  const [queryNote, setQueryNote] = useState('');
-  const [isQueryModalClosing, setIsQueryModalClosing] = useState(false);
-
+  
   // Custom Confirmation States
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
   const [bulkConfirm, setBulkConfirm] = useState<{ isOpen: boolean, status: Status | null }>({ isOpen: false, status: null });
   const [quickWorkedConfirm, setQuickWorkedConfirm] = useState<{ isOpen: boolean, manuscript: Manuscript | null }>({ isOpen: false, manuscript: null });
-
-  useEffect(() => {
-    setFilterStatus(activeFilter);
-    setSelectedIds(new Set()); 
-  }, [activeFilter]);
-
-  // Daily Stats for Header
-  const dailyStats = useMemo(() => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const workedToday = manuscripts.filter(m => {
-        const d = m.completedDate || m.dateStatusChanged || m.dateUpdated;
-        return d && d.split('T')[0] === today && (m.status === Status.WORKED || m.status === Status.BILLED);
-    }).length;
-    
-    return { workedToday };
-  }, [manuscripts]);
-
-  const pendingCount = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length;
-  const handoverCount = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.PENDING_JM).length;
-  
-  const counts = {
-    ALL: manuscripts.length,
-    UNTOUCHED: manuscripts.filter(m => m.status === Status.UNTOUCHED).length,
-    PENDING_GROUP: pendingCount,
-    WORKED: manuscripts.filter(m => m.status === Status.WORKED).length,
-    HANDOVER: handoverCount
-  };
-
-  const statusWeight: Record<Status, number> = {
-    [Status.BILLED]: 5,
-    [Status.WORKED]: 4,
-    [Status.PENDING_CED]: 3,
-    [Status.PENDING_TL]: 2,
-    [Status.PENDING_JM]: 1,
-    [Status.UNTOUCHED]: 0
-  };
-
-  const priorityWeight = {
-    'Urgent': 3,
-    'High': 2,
-    'Normal': 1
-  };
-
-  const handleSort = (key: SortKey) => {
-    let direction: SortDirection = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null;
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const filteredAndSorted = useMemo(() => {
-    let result = manuscripts.filter(m => {
-      let matchesStatus = false;
-      if (filterStatus === 'ALL') matchesStatus = true;
-      else if (filterStatus === 'PENDING_GROUP') {
-        matchesStatus = [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
-      } else if (filterStatus === 'HANDOVER') {
-        matchesStatus = m.status === Status.WORKED || m.status === Status.PENDING_JM;
-      } else {
-        matchesStatus = m.status === filterStatus;
-      }
-
-      const statusLabel = m.status.toLowerCase().replace(/_/g, ' ');
-      const matchesSearch = 
-        m.manuscriptId.toLowerCase().includes(search.toLowerCase()) || 
-        m.journalCode.toLowerCase().includes(search.toLowerCase()) ||
-        statusLabel.includes(search.toLowerCase());
-
-      const matchesDate = (() => {
-        if (!dateRange.start && !dateRange.end) return true;
-        let dateValue: string | undefined;
-        if (dateRange.field === 'dateStatusChanged') {
-             dateValue = (m.status === Status.WORKED && m.completedDate) 
-               ? m.completedDate 
-               : (m.dateStatusChanged || m.dateUpdated);
-        } else if (dateRange.field === 'dueDate') {
-             dateValue = m.dueDate;
-        } else {
-             dateValue = m.dateReceived;
-        }
-        if (!dateValue) return false;
-        const itemTime = new Date(dateValue).getTime();
-        if (isNaN(itemTime)) return false;
-        const startTime = dateRange.start ? new Date(dateRange.start).setHours(0,0,0,0) : -Infinity;
-        const endTime = dateRange.end ? new Date(dateRange.end).setHours(23,59,59,999) : Infinity;
-        return itemTime >= startTime && itemTime <= endTime;
-      })();
-
-      return matchesStatus && matchesSearch && matchesDate;
-    });
-
-    if (sortConfig.direction) {
-      result.sort((a, b) => {
-        let valA: any;
-        let valB: any;
-        switch (sortConfig.key) {
-          case 'status':
-            valA = statusWeight[a.status];
-            valB = statusWeight[b.status];
-            break;
-          case 'manuscriptId':
-            valA = a.manuscriptId.toLowerCase();
-            valB = b.manuscriptId.toLowerCase();
-            break;
-          case 'priority':
-            valA = priorityWeight[a.priority] || 0;
-            valB = priorityWeight[b.priority] || 0;
-            break;
-          case 'statusDate':
-            valA = new Date((a.status === Status.WORKED && a.completedDate) ? a.completedDate : (a.dateStatusChanged || a.dateUpdated)).getTime();
-            valB = new Date((b.status === Status.WORKED && b.completedDate) ? b.completedDate : (b.dateStatusChanged || b.dateUpdated)).getTime();
-            break;
-          default:
-            valA = new Date(a[sortConfig.key as keyof Manuscript] as string || 0).getTime();
-            valB = new Date(b[sortConfig.key as keyof Manuscript] as string || 0).getTime();
-        }
-        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return result;
-  }, [manuscripts, filterStatus, search, dateRange, sortConfig]);
-
-  const handleSelectAll = () => {
-    if (selectedIds.size === filteredAndSorted.length && filteredAndSorted.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredAndSorted.map(m => m.id)));
-    }
-  };
-
-  const handleSelectOne = (id: string) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) newSelected.delete(id);
-    else newSelected.add(id);
-    setSelectedIds(newSelected);
-  };
 
   // Fix: Defined handleReviewBulk to trigger onBulkReview with selected IDs
   const handleReviewBulk = () => {
@@ -202,7 +58,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
   const handleQuickAction = (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => {
     if (action === 'QUERY_JM') {
       setQueryModal({ isOpen: true, manuscript: m });
-      setQueryNote(''); 
       return;
     }
     if (action === 'WORKED') {
@@ -241,18 +96,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
     onUpdate(m.id, { dateEmailed: new Date().toISOString() });
   };
 
-  const handleCloseQueryModal = () => {
-    setIsQueryModalClosing(true);
-    setTimeout(() => {
-        setQueryModal({ isOpen: false, manuscript: null });
-        setIsQueryModalClosing(false);
-    }, 200);
-  };
-
-  const handleSubmitQuery = () => {
+  const handleSubmitQuery = (note: string) => {
     if (!queryModal.manuscript) return;
     const now = new Date().toISOString();
-    const noteContent = queryNote.trim() ? queryNote : "JM Query Raised";
+    const noteContent = note.trim() ? note : "JM Query Raised";
     const updates: Partial<Manuscript> = {
       status: Status.PENDING_JM,
       dateStatusChanged: now,
@@ -263,13 +110,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
         ...(queryModal.manuscript.notes || [])
       ]
     };
-    setIsQueryModalClosing(true);
-    setTimeout(() => {
-        onUpdate(queryModal.manuscript!.id, updates);
-        setQueryModal({ isOpen: false, manuscript: null });
-        setQueryNote('');
-        setIsQueryModalClosing(false);
-    }, 200);
+    onUpdate(queryModal.manuscript.id, updates);
+    setQueryModal({ isOpen: false, manuscript: null });
   };
 
   const downloadCSV = () => {
@@ -302,78 +144,6 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
       link.click();
       document.body.removeChild(link);
     }
-  };
-
-  const getStatusHub = (m: Manuscript) => {
-    const status = m.status;
-    const dateChanged = new Date(m.dateStatusChanged || m.dateUpdated);
-    const ageHours = (new Date().getTime() - dateChanged.getTime()) / (1000 * 3600);
-    const isCongested = ageHours > 24 && status !== Status.WORKED && status !== Status.BILLED;
-
-    const config = {
-      [Status.WORKED]: { label: 'Worked', icon: <CheckCircle className="w-3.5 h-3.5" />, color: 'emerald' },
-      [Status.BILLED]: { label: 'Billed', icon: <FileCheck className="w-3.5 h-3.5" />, color: 'indigo' },
-      [Status.UNTOUCHED]: { label: 'Untouched', icon: <Inbox className="w-3.5 h-3.5" />, color: 'slate' },
-      [Status.PENDING_JM]: { label: 'JM Query', icon: <AlertCircle className="w-3.5 h-3.5" />, color: 'rose' },
-      [Status.PENDING_TL]: { label: 'TL Query', icon: <AlertTriangle className="w-3.5 h-3.5" />, color: 'amber' },
-      [Status.PENDING_CED]: { label: 'Email CED', icon: <Mail className="w-3.5 h-3.5" />, color: 'violet' },
-    };
-
-    const current = config[status] || { label: status, icon: <Clock className="w-3.5 h-3.5" />, color: 'gray' };
-
-    return (
-      <div className="relative group/hub">
-        <div className={`
-          flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border shadow-sm transition-all duration-300 cursor-default whitespace-nowrap
-          ${isCongested ? 'animate-pulse ring-2 ring-rose-200' : ''}
-          ${current.color === 'emerald' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : ''}
-          ${current.color === 'indigo' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : ''}
-          ${current.color === 'slate' ? 'bg-slate-50 text-slate-600 border-slate-200' : ''}
-          ${current.color === 'rose' ? 'bg-rose-50 text-rose-700 border-rose-100' : ''}
-          ${current.color === 'amber' ? 'bg-amber-50 text-amber-700 border-amber-100' : ''}
-          ${current.color === 'violet' ? 'bg-violet-50 text-violet-700 border-violet-100' : ''}
-        `}>
-          {isCongested ? <Zap className="w-3.5 h-3.5 text-rose-600" /> : current.icon}
-          {isCongested ? `Congested: ${current.label}` : current.label}
-        </div>
-
-        <div className="absolute left-1/2 -translate-x-1/2 top-0 opacity-0 group-hover/hub:opacity-100 pointer-events-none group-hover/hub:pointer-events-auto transition-all duration-300 z-30 flex bg-white border border-slate-200 rounded-full p-1 shadow-xl translate-y-2 group-hover/hub:translate-y-0">
-          {(Object.entries(config) as [Status, any][]).map(([s, cfg]) => (
-            <button
-              key={s}
-              onClick={() => handleQuickStatusUpdate(m, s)}
-              className={`p-1.5 rounded-full transition-colors hover:scale-110 active:scale-95 ${m.status === s ? 'bg-slate-100 text-slate-900' : `text-${cfg.color}-600 hover:bg-${cfg.color}-50`}`}
-              title={`Switch to ${cfg.label}`}
-            >
-              {cfg.icon}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const isTodayDate = (dateString?: string) => {
-    if (!dateString) return false;
-    const d = new Date(dateString);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear() &&
-           d.getMonth() === now.getMonth() &&
-           d.getDate() === now.getDate();
-  };
-
-  const isActivityToday = (date: Date) => {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
-
-  const renderSortIcon = (key: SortKey) => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
-    if (sortConfig.direction === 'asc') return <ArrowUp className="w-3 h-3 text-blue-600" />;
-    if (sortConfig.direction === 'desc') return <ArrowDown className="w-3 h-3 text-blue-600" />;
-    return <ArrowUpDown className="w-3 h-3 opacity-30" />;
   };
 
   return (
@@ -422,333 +192,43 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
           </div>
         )}
 
-        <div className="border-b border-slate-200 bg-slate-50/30">
-          <div className="p-5 flex flex-col xl:flex-row gap-4 justify-between items-center">
-            <div className="flex gap-2 w-full xl:w-auto items-center">
-              <div className="relative w-full md:w-80 group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                <input
-                  type="text"
-                  placeholder="Search ID, Journal, or Status..."
-                  className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all bg-white"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                />
-                {search && (
-                  <button 
-                    onClick={() => setSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <button
-                 onClick={onRefresh}
-                 className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm group"
-                 title="Refresh List"
-              >
-                 <RefreshCcw className="w-5 h-5 group-active:rotate-180 transition-transform duration-500" />
-              </button>
-              <button
-                 onClick={() => setShowDateFilters(!showDateFilters)}
-                 className={`p-2.5 rounded-xl border transition-all ${showDateFilters ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-inner' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300'}`}
-                 title="Filter by Date"
-              >
-                 <Calendar className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex gap-2 w-full xl:w-auto overflow-x-auto items-center pb-1 xl:pb-0 hide-scrollbar">
-              {(['ALL', 'HANDOVER', 'UNTOUCHED', 'PENDING_GROUP', 'WORKED'] as const).map(key => {
-                const statusKey = key === 'ALL' ? 'ALL' : key === 'HANDOVER' ? 'HANDOVER' : key === 'UNTOUCHED' ? Status.UNTOUCHED : key === 'WORKED' ? Status.WORKED : 'PENDING_GROUP';
-                return (
-                  <button
-                    key={statusKey}
-                    onClick={() => setFilterStatus(statusKey)}
-                    className={`px-4 py-2 text-sm font-medium rounded-xl transition-all whitespace-nowrap flex items-center gap-2 ${
-                      filterStatus === statusKey
-                        ? 'bg-slate-800 text-white shadow-md transform scale-105'
-                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <span>
-                      {key === 'ALL' ? 'All' : key === 'HANDOVER' ? 'Handover List' : key === 'PENDING_GROUP' ? 'Pending' : key.charAt(0) + key.slice(1).toLowerCase()}
-                    </span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${
-                       filterStatus === statusKey ? 'bg-slate-600 text-slate-100' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {counts[key as keyof typeof counts]}
-                    </span>
-                  </button>
-                );
-              })}
-              <div className="h-6 w-px bg-slate-200 mx-2 hidden xl:block"></div>
-              <button onClick={downloadCSV} className="px-4 py-2 text-sm font-medium bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 flex items-center gap-2 whitespace-nowrap transition-all">
-                <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
-              </button>
-            </div>
-          </div>
+        <ManuscriptFilters
+          search={search}
+          setSearch={setSearch}
+          onRefresh={onRefresh}
+          showDateFilters={showDateFilters}
+          setShowDateFilters={setShowDateFilters}
+          filterStatus={filterStatus}
+          setFilterStatus={setFilterStatus}
+          counts={counts}
+          onExport={downloadCSV}
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+        />
 
-          {showDateFilters && (
-               <div className="px-5 pb-5 flex flex-wrap gap-4 items-center animate-scale-in origin-top border-t border-slate-200 pt-4 bg-slate-50/50">
-                  <div className="flex items-center gap-2">
-                     <Filter className="w-4 h-4 text-slate-400" />
-                     <span className="text-sm text-slate-700 font-medium">Filter by:</span>
-                     <select 
-                        className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white py-1.5"
-                        value={dateRange.field}
-                        onChange={e => setDateRange({...dateRange, field: e.target.value})}
-                     >
-                        <option value="dateReceived">Date Sent (Received)</option>
-                        <option value="dateStatusChanged">Status / Completed Date</option>
-                        <option value="dueDate">Due Date</option>
-                     </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <span className="text-sm text-slate-500">From</span>
-                     <input type="date" className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <span className="text-sm text-slate-500">To</span>
-                     <input type="date" className="text-sm border-slate-300 rounded-lg focus:ring-blue-500 bg-white px-2 py-1.5" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} />
-                  </div>
-                  {(dateRange.start || dateRange.end) && (
-                      <button onClick={() => setDateRange({...dateRange, start: '', end: ''})} className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded flex items-center gap-1 transition-colors">
-                         <X className="w-3 h-3" /> Clear
-                      </button>
-                  )}
-               </div>
-          )}
-        </div>
-
-        <div className="overflow-x-auto min-h-[400px]">
-          {filterStatus === 'HANDOVER' && (
-            <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex items-center gap-3">
-               <FileCheck className="w-5 h-5 text-indigo-600" />
-               <p className="text-sm text-indigo-800 font-medium">
-                 Handover View: <span className="font-bold">Worked (Ready)</span> and <span className="font-bold text-rose-700">JM Queries</span>.
-               </p>
-            </div>
-          )}
-          <table className="w-full text-center text-sm text-slate-600 border-separate border-spacing-0">
-            <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-4 w-10 text-center sticky top-0 bg-slate-50/80 z-10">
-                  <input type="checkbox" checked={filteredAndSorted.length > 0 && selectedIds.size === filteredAndSorted.length} onChange={handleSelectAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
-                </th>
-                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Interactive Status</th>
-                <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
-                  onClick={() => handleSort('statusDate')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    Timeline {renderSortIcon('statusDate')}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
-                  onClick={() => handleSort('manuscriptId')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    ID / Journal {renderSortIcon('manuscriptId')}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
-                  onClick={() => handleSort('dateReceived')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    Date Sent {renderSortIcon('dateReceived')}
-                  </div>
-                </th>
-                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Due Date</th>
-                <th 
-                  className="px-6 py-4 text-center cursor-pointer hover:bg-slate-100/50 transition-colors select-none sticky top-0 bg-slate-50/80 z-10"
-                  onClick={() => handleSort('priority')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    Priority {renderSortIcon('priority')}
-                  </div>
-                </th>
-                <th className="px-6 py-4 min-w-[220px] text-center sticky top-0 bg-slate-50/80 z-10">Remarks History</th>
-                <th className="px-6 py-4 text-center sticky top-0 bg-slate-50/80 z-10">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredAndSorted.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-24 text-center text-slate-400">
-                    <div className="flex flex-col items-center gap-2">
-                      <Inbox className="w-12 h-12 text-slate-200" />
-                      <p>{search ? 'No matches found.' : 'Empty queue.'}</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {filteredAndSorted.map((m) => {
-                 const displayDateRaw = (m.status === Status.WORKED || m.status === Status.BILLED) && m.completedDate ? m.completedDate : (m.dateStatusChanged || m.dateUpdated);
-                 const dateObj = new Date(displayDateRaw);
-                 const isActivityTodayFlag = isActivityToday(dateObj);
-                 const isDueToday = isTodayDate(m.dueDate) && (m.status !== Status.WORKED && m.status !== Status.BILLED);
-                 const isSelected = selectedIds.has(m.id);
-                 const ageInDays = Math.floor((new Date().getTime() - dateObj.getTime()) / (1000 * 3600 * 24));
-
-                 return (
-                  <tr key={m.id} className={`group transition-all duration-200 ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'} ${m.status === Status.PENDING_JM ? 'bg-rose-50/10' : ''}`}>
-                    <td className="px-6 py-4 text-center border-b border-slate-50">
-                      <input type="checkbox" checked={isSelected} onChange={() => handleSelectOne(m.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4 transition-colors" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center border-b border-slate-50">
-                      <div className="flex justify-center">
-                        {getStatusHub(m)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center border-b border-slate-50">
-                      <div className="flex flex-col items-center">
-                        <span className={`text-[10px] font-bold ${isActivityTodayFlag ? 'text-blue-600' : 'text-slate-500'}`}>
-                          {dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </span>
-                        {[Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && (
-                          <div className="flex items-center gap-1 text-[9px] text-rose-500 font-black mt-1 uppercase tracking-tighter">
-                            <Timer className="w-2.5 h-2.5" /> {ageInDays === 0 ? 'Today' : `${ageInDays}d ago`}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center border-b border-slate-50">
-                      <div className="flex flex-col gap-0.5 items-center">
-                        <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{m.manuscriptId}</span>
-                        <span className="text-slate-400 text-[10px] font-mono">{m.journalCode}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center text-slate-700 border-b border-slate-50">{new Date(m.dateReceived).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-center border-b border-slate-50">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`text-sm ${isDueToday ? 'font-black text-rose-600' : 'text-slate-700'}`}>
-                          {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : '—'}
-                        </span>
-                        {isDueToday && (
-                          <span className="text-[9px] font-black text-white bg-rose-600 px-1.5 py-0.5 rounded uppercase leading-none tracking-widest animate-pulse">Due Today</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center border-b border-slate-50">
-                      <select
-                        value={m.priority}
-                        onChange={(e) => onUpdate(m.id, { priority: e.target.value as any })}
-                        className={`block w-full text-[10px] font-black px-2 py-1 rounded-lg border appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-center ${
-                          m.priority === 'Urgent' ? 'bg-red-50 text-red-600 border-red-100' : 
-                          m.priority === 'High' ? 'bg-orange-50 text-orange-600 border-orange-100' : 
-                          'bg-white text-slate-500 border-slate-200'
-                        }`}
-                      >
-                        <option value="Normal">NORMAL</option>
-                        <option value="High">HIGH</option>
-                        <option value="Urgent">URGENT</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-center relative group/remarks border-b border-slate-50">
-                      <div className="flex flex-col gap-1.5 items-center">
-                        {m.notes.length > 0 ? (
-                          <div className="relative w-full max-w-[200px] py-1">
-                            <div className="bg-slate-50/80 p-2 rounded-lg border border-slate-100 group-hover/remarks:border-indigo-200 group-hover/remarks:bg-white group-hover/remarks:shadow-sm transition-all cursor-default overflow-hidden">
-                              <div className="text-[11px] text-slate-600 line-clamp-2 text-center leading-relaxed">
-                                {m.notes[0].content}
-                              </div>
-                            </div>
-                            {m.notes.length > 1 && (
-                              <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-indigo-600 text-white text-[9px] font-black shadow-lg border border-white z-10 transition-transform group-hover/remarks:scale-110">
-                                {m.notes.length}
-                              </div>
-                            )}
-                            
-                            {/* History Panel with Smooth Transition */}
-                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-72 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-200 opacity-0 invisible scale-95 group-hover/remarks:opacity-100 group-hover/remarks:visible group-hover/remarks:scale-100 transition-all duration-300 z-50 p-5 origin-top text-center overflow-hidden">
-                               <div className="flex items-center justify-center gap-2 mb-4 border-b border-slate-50 pb-3">
-                                  <HistoryIcon className="w-4 h-4 text-indigo-500" />
-                                  <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Remark History</span>
-                               </div>
-                               <div className="space-y-4 max-h-56 overflow-y-auto custom-scrollbar px-1 pr-2">
-                                  {m.notes.map((note, idx) => (
-                                    <div key={note.id} className={`text-left relative pl-3 ${idx !== m.notes.length - 1 ? 'border-l-2 border-slate-100 pb-4' : 'pl-3'}`}>
-                                       <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-indigo-400"></div>
-                                       <p className="text-[11px] text-slate-700 font-semibold leading-relaxed">{note.content}</p>
-                                       <p className="text-[9px] text-slate-400 mt-1 font-bold flex items-center gap-1.5">
-                                          <Clock className="w-2.5 h-2.5" />
-                                          {new Date(note.timestamp).toLocaleDateString()} at {new Date(note.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                       </p>
-                                    </div>
-                                  ))}
-                               </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-300 italic flex items-center gap-1.5"><MessageSquare className="w-3 h-3" /> No remarks</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center whitespace-nowrap border-b border-slate-50">
-                      <div className="flex justify-center items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                        {m.status !== Status.WORKED && m.status !== Status.BILLED && (
-                          <>
-                            <button onClick={() => handleSendEmail(m)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all" title="Email Query"><Send className="w-4 h-4" /></button>
-                            {m.status !== Status.PENDING_JM && (
-                              <button onClick={() => handleQuickAction(m, 'QUERY_JM')} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-all" title="Query JM"><AlertCircle className="w-4 h-4" /></button>
-                            )}
-                            <button onClick={() => handleQuickAction(m, 'WORKED')} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-all" title="Resolve"><CheckSquare className="w-4 h-4" /></button>
-                          </>
-                        )}
-                        <button onClick={() => onEdit(m)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => setDeleteConfirm({ isOpen: true, id: m.id })} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ManuscriptTable
+          filteredAndSorted={filteredAndSorted}
+          selectedIds={selectedIds}
+          onSelectAll={handleSelectAll}
+          onSelectOne={handleSelectOne}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          onUpdate={onUpdate}
+          filterStatus={filterStatus}
+          search={search}
+          onQuickAction={handleQuickAction}
+          onSendEmail={handleSendEmail}
+          onEdit={onEdit}
+          onDelete={(id) => setDeleteConfirm({ isOpen: true, id })}
+        />
       </div>
 
-      {queryModal.isOpen && queryModal.manuscript && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md ${isQueryModalClosing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}>
-          <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 ${isQueryModalClosing ? 'modal-content-exit' : 'modal-content-enter'}`}>
-             <div className="bg-rose-50 p-4 border-b border-rose-100 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                   <div className="p-2 bg-rose-100 rounded-full">
-                      <AlertCircle className="w-5 h-5 text-rose-600" />
-                   </div>
-                   <div>
-                      <h3 className="font-bold text-rose-900">Query to JM</h3>
-                      <p className="text-xs text-rose-700">{queryModal.manuscript.manuscriptId}</p>
-                   </div>
-                </div>
-                <button onClick={handleCloseQueryModal} className="p-1 hover:bg-rose-200 rounded-full text-rose-400 hover:text-rose-700 transition-colors">
-                   <X className="w-5 h-5" />
-                </button>
-             </div>
-             <div className="p-6 text-center">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Query Details</label>
-                <div className="relative">
-                  <MessageSquare className="absolute top-3 left-3 w-4 h-4 text-slate-400" />
-                  <textarea
-                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all text-sm min-h-[100px] resize-none text-center"
-                     placeholder="State the issue clearly..."
-                     value={queryNote}
-                     onChange={(e) => setQueryNote(e.target.value)}
-                     autoFocus
-                  />
-                </div>
-                <p className="text-xs text-slate-400 mt-2">This moves status to PENDING_JM</p>
-             </div>
-             <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                <button onClick={handleCloseQueryModal} className="px-4 py-2 text-slate-600 hover:bg-white rounded-xl text-sm font-medium">Cancel</button>
-                <button onClick={handleSubmitQuery} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-md shadow-rose-200 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"><Send className="w-4 h-4" /> Raise Query</button>
-             </div>
-          </div>
-        </div>
-      )}
+      <QueryModal 
+        isOpen={queryModal.isOpen} 
+        manuscript={queryModal.manuscript} 
+        onClose={() => setQueryModal({ isOpen: false, manuscript: null })} 
+        onSubmit={handleSubmitQuery} 
+      />
 
       {/* Confirmation Modals */}
       <ConfirmationModal

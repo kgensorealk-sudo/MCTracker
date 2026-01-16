@@ -102,6 +102,37 @@ export const dataService = {
     }
   },
 
+  applyEscalationRule(m: Manuscript): Manuscript {
+    const isDueToday = isTodayDate(m.dueDate);
+    const isPendingReview = [Status.UNTOUCHED, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
+    
+    if (isDueToday && isPendingReview && m.priority === 'Normal') {
+      return { ...m, priority: 'High' as const };
+    }
+    return m;
+  },
+
+  async autoEscalate(items: Manuscript[], isOffline: boolean): Promise<Manuscript[]> {
+    const escalatedIds: string[] = [];
+    const updatedItems = items.map(m => {
+      const escalated = this.applyEscalationRule(m);
+      if (escalated.priority !== m.priority) {
+        escalatedIds.push(m.id);
+        return { ...escalated, dateUpdated: new Date().toISOString() };
+      }
+      return m;
+    });
+
+    if (escalatedIds.length > 0) {
+      try {
+        await this.updateManuscripts(escalatedIds, { priority: 'High' as const }, isOffline);
+      } catch (e) {
+        console.error("Auto-escalation sync failed:", e);
+      }
+    }
+    return updatedItems;
+  },
+
   async createManuscript(m: Manuscript, forceLocal = false): Promise<Manuscript> {
     if (!isSupabaseConfigured || forceLocal) {
       const current = getLocalManuscripts();

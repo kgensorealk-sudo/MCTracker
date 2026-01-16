@@ -67,19 +67,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userName, manuscripts, target, us
   // 2. INTELLIGENT STATISTICS
   const stats = useMemo(() => {
     const now = new Date();
-    const isTodayLocal = (dateStr?: string) => {
-        if (!dateStr) return false;
-        const d = new Date(dateStr);
-        return d.getFullYear() === now.getFullYear() &&
-               d.getMonth() === now.getMonth() &&
-               d.getDate() === now.getDate();
-    };
-
     const inCycle = (ds?: string) => ds && new Date(ds) >= cycle.start && new Date(ds) <= cycle.end;
     
     const workedItems = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.BILLED);
     const cycleWorked = workedItems.filter(m => inCycle(m.completedDate || m.dateStatusChanged)).length;
-    const workedToday = workedItems.filter(m => isTodayLocal(m.completedDate || m.dateStatusChanged || m.dateUpdated)).length;
+    const workedToday = workedItems.filter(m => isTodayDate(m.completedDate || m.dateStatusChanged || m.dateUpdated)).length;
     
     const totalPending = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)).length;
     const urgentFiles = manuscripts.filter(m => m.priority === 'Urgent' && m.status !== Status.WORKED && m.status !== Status.BILLED);
