@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Manuscript, UserSchedule } from '../types';
+import { Manuscript, UserSchedule, Status } from '../types';
+import { isTodayDate } from '../lib/utils';
 
 // Map DB snake_case to TS camelCase
 const mapToManuscript = (row: any): Manuscript => ({
