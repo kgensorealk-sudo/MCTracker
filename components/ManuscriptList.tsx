@@ -36,6 +36,18 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, on
 
   // Modals States
   const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
+  const [emailModal, setEmailModal] = useState<{
+    isOpen: boolean;
+    recipient: string;
+    subject: string;
+    body: string;
+    manuscriptId?: string;
+  }>({
+    isOpen: false,
+    recipient: '',
+    subject: '',
+    body: ''
+  });
   
   // Custom Confirmation States
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
