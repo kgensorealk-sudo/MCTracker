@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Manuscript, Status } from '../types';
-import { ListChecks, FileCheck, Target, Flame, X } from 'lucide-react';
+import { Search, Edit2, CheckCircle, Clock, Trash2, Zap, RefreshCcw, MessageSquare, Copy, Filter, AlertCircle, Inbox } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
-import { ManuscriptFilters } from './ManuscriptFilters';
-import { ManuscriptTable } from './ManuscriptTable';
-import { QueryModal } from './QueryModal';
-import { useManuscriptList } from '../hooks/useManuscriptList';
 
 interface ManuscriptListProps {
   manuscripts: Manuscript[];
@@ -13,236 +10,174 @@ interface ManuscriptListProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Manuscript>) => void;
   onBulkUpdate: (ids: string[], updates: Partial<Manuscript>) => void;
-  onBulkReview?: (ids: string[]) => void; 
   onRefresh?: () => void;
-  activeFilter: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER';
+  activeFilter: Status | 'ALL' | 'PENDING_GROUP' | 'URGENT';
 }
 
-const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkReview, onRefresh, activeFilter }) => {
-  const {
-    filterStatus, setFilterStatus,
-    search, setSearch,
-    selectedIds, setSelectedIds,
-    showDateFilters, setShowDateFilters,
-    dateRange, setDateRange,
-    sortConfig, handleSort,
-    filteredAndSorted,
-    dailyStats,
-    counts,
-    handleSelectAll,
-    handleSelectOne
-  } = useManuscriptList({ manuscripts, activeFilter });
-
-  // Modals States
-  const [queryModal, setQueryModal] = useState<{isOpen: boolean, manuscript: Manuscript | null}>({ isOpen: false, manuscript: null });
-  // Email modal removed
-  
-  // Custom Confirmation States
+const ManuscriptList: React.FC<ManuscriptListProps> = ({ manuscripts, onEdit, onDelete, onUpdate, onRefresh, activeFilter }) => {
+  const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'URGENT'>(activeFilter);
+  const [search, setSearch] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
-  const [bulkConfirm, setBulkConfirm] = useState<{ isOpen: boolean, status: Status | null }>({ isOpen: false, status: null });
-  const [quickWorkedConfirm, setQuickWorkedConfirm] = useState<{ isOpen: boolean, manuscript: Manuscript | null }>({ isOpen: false, manuscript: null });
 
-  // Fix: Defined handleReviewBulk to trigger onBulkReview with selected IDs
-  const handleReviewBulk = () => {
-    if (onBulkReview && selectedIds.size > 0) {
-      onBulkReview(Array.from(selectedIds));
-    }
-  };
+  useEffect(() => { setFilterStatus(activeFilter); }, [activeFilter]);
 
-  const handleQuickStatusUpdate = (m: Manuscript, newStatus: Status) => {
-    const updates: Partial<Manuscript> = {
-      status: newStatus,
-    };
-    onUpdate(m.id, updates);
-  };
-
-  const handleQuickAction = (m: Manuscript, action: 'WORKED' | 'QUERY_JM') => {
-    if (action === 'QUERY_JM') {
-      setQueryModal({ isOpen: true, manuscript: m });
-      return;
-    }
-    if (action === 'WORKED') {
-      setQuickWorkedConfirm({ isOpen: true, manuscript: m });
-    }
-  };
-
-  // Email send removed
-
-  // Email mark sent removed
-
-  const handleSubmitQuery = (note: string) => {
-    if (!queryModal.manuscript) return;
-    const now = new Date().toISOString();
-    const noteContent = note.trim() ? note : "JM Query Raised";
-    const updates: Partial<Manuscript> = {
-      status: Status.PENDING_JM,
-      dateStatusChanged: now,
-      dateUpdated: now,
-      dateQueried: now, 
-      notes: [
-        { id: crypto.randomUUID(), content: noteContent, timestamp: Date.now() },
-        ...(queryModal.manuscript.notes || [])
-      ]
-    };
-    onUpdate(queryModal.manuscript.id, updates);
-    setQueryModal({ isOpen: false, manuscript: null });
-  };
-
-  const downloadCSV = () => {
-    const headers = ['Manuscript ID', 'Journal', 'Date Sent', 'Due Date', 'Status', 'Status Date', 'Submitted Date', 'Priority', 'Remarks'];
-    const rows = filteredAndSorted.map(m => {
-      const headers_content = m.notes.map(n => `[${new Date(n.timestamp).toLocaleDateString()}] ${n.content}`).join('; ');
-      let submittedDate = '';
-      if (m.status === Status.WORKED || m.status === Status.BILLED) {
-          const rawDate = m.completedDate || m.dateStatusChanged || m.dateUpdated;
-          submittedDate = new Date(rawDate).toLocaleDateString();
-      }
-      const statusDateRaw = m.dateStatusChanged || m.dateUpdated;
-      const statusDate = new Date(statusDateRaw).toLocaleDateString();
-      return [
-        m.manuscriptId, m.journalCode, new Date(m.dateReceived).toLocaleDateString(),
-        m.dueDate ? new Date(m.dueDate).toLocaleDateString() : '',
-        m.status, statusDate, submittedDate, m.priority,
-        `"${headers_content.replace(/"/g, '""')}"`
-      ];
+  const filtered = useMemo(() => {
+    return manuscripts.filter(m => {
+      let match = filterStatus === 'ALL' || (
+        filterStatus === 'PENDING_GROUP' 
+          ? [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) 
+          : (filterStatus === 'URGENT' ? m.priority === 'Urgent' && m.status !== Status.WORKED : m.status === filterStatus)
+      );
+      if (!match) return false;
+      if (search && !m.manuscriptId.toLowerCase().includes(search.toLowerCase()) && !m.journalCode.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
     });
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `manuscripts_export_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+  }, [manuscripts, filterStatus, search]);
+
+  const handleCopyHandover = () => {
+    const worked = manuscripts.filter(m => m.status === Status.WORKED).map(m => m.manuscriptId).join(', ');
+    const pending = manuscripts.filter(m => [Status.PENDING_JM, Status.PENDING_TL].includes(m.status)).map(m => `${m.manuscriptId} (${m.status})`).join('\n');
+    
+    const text = `HANDOVER REPORT - ${new Date().toLocaleDateString()}\n\nWORKED:\n${worked || 'None'}\n\nPENDING:\n${pending || 'None'}`;
+    navigator.clipboard.writeText(text);
+    alert('Handover summary copied to clipboard!');
+  };
+
+  const getStatusStyle = (s: Status) => {
+    const colors: Record<Status, {bg: string, text: string, dot: string}> = {
+      [Status.WORKED]: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+      [Status.BILLED]: { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+      [Status.UNTOUCHED]: { bg: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' },
+      [Status.PENDING_JM]: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
+      [Status.PENDING_TL]: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+      [Status.PENDING_CED]: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' }
+    };
+    return colors[s] || { bg: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' };
   };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-slate-900 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl shadow-slate-200/50 animate-fade-in-up">
-         <div className="flex items-center gap-4">
-            <div className="p-2 bg-blue-600 rounded-xl">
-               <Target className="w-5 h-5" />
-            </div>
-            <div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Shift</p>
-               <h4 className="text-sm font-bold">Worklog Oversight</h4>
-            </div>
-         </div>
-         <div className="flex items-center gap-6 bg-white/5 px-6 py-2 rounded-xl border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-               <span className="text-xs font-bold text-slate-300">Worked Today:</span>
-               <span className="text-sm font-black text-white">{dailyStats.workedToday}</span>
-            </div>
-            <div className="h-4 w-px bg-white/10"></div>
-            <div className="flex items-center gap-2">
-               <Flame className="w-3.5 h-3.5 text-amber-500" />
-               <span className="text-xs font-bold text-slate-300">Pace:</span>
-               <span className="text-sm font-black text-white">Active</span>
-            </div>
-         </div>
+    <div className="space-y-6 animate-page-enter">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
+           {[
+             { id: 'ALL', label: 'All Files', icon: Inbox },
+             { id: Status.WORKED, label: 'Worked', icon: CheckCircle },
+             { id: 'PENDING_GROUP', label: 'Pending', icon: Clock },
+             { id: Status.PENDING_JM, label: 'JM Queries', icon: MessageSquare }
+           ].map(t => (
+             <button
+               key={t.id}
+               onClick={() => setFilterStatus(t.id as any)}
+               className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${filterStatus === t.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+             >
+               <t.icon className="w-3.5 h-3.5" /> {t.label}
+             </button>
+           ))}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={handleCopyHandover} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black hover:bg-slate-50 transition-all shadow-sm">
+            <Copy className="w-3.5 h-3.5" /> Handover Text
+          </button>
+          <button onClick={onRefresh} className="p-2.5 text-slate-400 hover:text-indigo-600 transition-all bg-white rounded-xl border border-slate-200 shadow-sm">
+            <RefreshCcw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible relative animate-fade-in-up">
-        {selectedIds.size > 0 && (
-          <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-6 py-4 shadow-2xl z-50 flex items-center gap-5 animate-fade-in-up border border-white/10 ring-1 ring-black/20">
-             <span className="font-bold text-sm whitespace-nowrap px-3 bg-white/10 rounded-lg py-1.5">{selectedIds.size} selected</span>
-             <div className="h-6 w-px bg-white/20"></div>
-             <button onClick={handleReviewBulk} className="flex items-center gap-2 hover:text-emerald-300 transition-colors text-sm font-semibold">
-               <ListChecks className="w-5 h-5" /> Review Items
-             </button>
-             <div className="h-6 w-px bg-white/20"></div>
-             <button onClick={() => setBulkConfirm({ isOpen: true, status: Status.BILLED })} className="flex items-center gap-2 hover:text-indigo-300 transition-colors text-sm font-semibold">
-               <FileCheck className="w-5 h-5" /> Mark Billed
-             </button>
-             <div className="h-6 w-px bg-white/20"></div>
-             <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-full">
-               <X className="w-5 h-5" />
-             </button>
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+            <input 
+              type="text" 
+              placeholder="Filter by ID or Journal..." 
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none text-sm transition-all font-medium" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+            />
           </div>
-        )}
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{filtered.length} Work Items</p>
+        </div>
 
-        <ManuscriptFilters
-          search={search}
-          setSearch={setSearch}
-          onRefresh={onRefresh}
-          showDateFilters={showDateFilters}
-          setShowDateFilters={setShowDateFilters}
-          filterStatus={filterStatus}
-          setFilterStatus={setFilterStatus}
-          counts={counts}
-          onExport={downloadCSV}
-          dateRange={dateRange}
-          setDateRange={setDateRange}
-        />
-
-        <ManuscriptTable
-          filteredAndSorted={filteredAndSorted}
-          selectedIds={selectedIds}
-          onSelectAll={handleSelectAll}
-          onSelectOne={handleSelectOne}
-          sortConfig={sortConfig}
-          onSort={handleSort}
-          onUpdate={onUpdate}
-          filterStatus={filterStatus}
-          search={search}
-          onQuickAction={handleQuickAction}
-          onEdit={onEdit}
-          onDelete={(id) => setDeleteConfirm({ isOpen: true, id })}
-        />
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50/50 text-slate-400 font-black uppercase text-[10px] tracking-widest border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5">Manuscript Info</th>
+                <th className="px-8 py-5">Status</th>
+                <th className="px-8 py-5">Priority</th>
+                <th className="px-8 py-5">Due Date</th>
+                <th className="px-8 py-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filtered.map(m => {
+                const style = getStatusStyle(m.status);
+                return (
+                  <tr key={m.id} className="group hover:bg-slate-50/50 transition-all">
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-1.5 h-10 rounded-full ${style.dot} opacity-50`} />
+                        <div>
+                          <p className="font-black text-slate-800 tracking-tight text-base">{m.manuscriptId}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{m.journalCode}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${style.bg} ${style.text}`}>
+                        <div className={`w-2 h-2 rounded-full ${style.dot}`} />
+                        {m.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      {m.priority === 'Urgent' ? (
+                        <span className="flex items-center gap-1.5 text-rose-600 font-black text-[10px] uppercase">
+                          <Zap className="w-3.5 h-3.5 fill-rose-600" /> Urgent
+                        </span>
+                      ) : m.priority === 'High' ? (
+                        <span className="flex items-center gap-1.5 text-amber-600 font-black text-[10px] uppercase">
+                          <AlertCircle className="w-3.5 h-3.5 fill-amber-600" /> High
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-black text-[10px] uppercase">Normal</span>
+                      )}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <Clock className="w-3.5 h-3.5 text-slate-300" />
+                        {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(m)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-100">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDeleteConfirm({ isOpen: true, id: m.id })} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-100">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <div className="py-20 text-center bg-slate-50/20">
+              <p className="text-slate-400 font-bold">No assignments found in this view</p>
+            </div>
+          )}
+        </div>
       </div>
-
-      <QueryModal 
-        isOpen={queryModal.isOpen} 
-        manuscript={queryModal.manuscript} 
-        onClose={() => setQueryModal({ isOpen: false, manuscript: null })} 
-        onSubmit={handleSubmitQuery} 
-      />
-      {/* Email modal removed */}
-
-      {/* Confirmation Modals */}
-      <ConfirmationModal
-        isOpen={deleteConfirm.isOpen}
-        title="Delete Record?"
-        message="This action cannot be undone. All work history for this manuscript will be permanently removed."
-        variant="danger"
-        confirmLabel="Delete Permanently"
-        onConfirm={() => {
-          if (deleteConfirm.id) onDelete(deleteConfirm.id);
-          setDeleteConfirm({ isOpen: false, id: null });
-        }}
-        onCancel={() => setDeleteConfirm({ isOpen: false, id: null })}
-      />
-
-      <ConfirmationModal
-        isOpen={bulkConfirm.isOpen}
-        title="Bulk Update?"
-        message={`Are you sure you want to mark ${selectedIds.size} items as ${bulkConfirm.status?.replace(/_/g, ' ')}?`}
-        variant="primary"
-        confirmLabel="Update Items"
-        onConfirm={() => {
-          if (bulkConfirm.status) onBulkUpdate(Array.from(selectedIds), { status: bulkConfirm.status });
-          setSelectedIds(new Set());
-          setBulkConfirm({ isOpen: false, status: null });
-        }}
-        onCancel={() => setBulkConfirm({ isOpen: false, status: null })}
-      />
-
-      <ConfirmationModal
-        isOpen={quickWorkedConfirm.isOpen}
-        title="Resolve Item?"
-        message={`Mark ${quickWorkedConfirm.manuscript?.manuscriptId} as WORKED/DONE? This will update your daily quota progress.`}
-        variant="success"
-        confirmLabel="Yes, Resolve"
-        onConfirm={() => {
-          if (quickWorkedConfirm.manuscript) handleQuickStatusUpdate(quickWorkedConfirm.manuscript, Status.WORKED);
-          setQuickWorkedConfirm({ isOpen: false, manuscript: null });
-        }}
-        onCancel={() => setQuickWorkedConfirm({ isOpen: false, manuscript: null })}
+      <ConfirmationModal 
+        isOpen={deleteConfirm.isOpen} 
+        title="Confirm Deletion" 
+        message="Are you sure you want to remove this manuscript from the worklog?" 
+        variant="danger" 
+        onConfirm={() => { if (deleteConfirm.id) onDelete(deleteConfirm.id); setDeleteConfirm({ isOpen: false, id: null }); }} 
+        onCancel={() => setDeleteConfirm({ isOpen: false, id: null })} 
       />
     </div>
   );

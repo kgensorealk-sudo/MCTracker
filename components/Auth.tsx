@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, ArrowRight, User } from 'lucide-react';
@@ -16,8 +17,10 @@ export const Auth: React.FC = () => {
     setMessage(null);
 
     try {
+      const auth = supabase.auth as any;
       if (isSignUp) {
-        const { error, data } = await supabase.auth.signUp({
+        // Fix: Casting for Supabase version compatibility
+        const { error, data, user } = await auth.signUp({
           email,
           password,
           options: {
@@ -28,11 +31,16 @@ export const Auth: React.FC = () => {
         });
         if (error) throw error;
         
-        if (data.user && !data.session) {
+        const resultUser = user || data?.user;
+        const resultSession = data?.session;
+        
+        if (resultUser && !resultSession) {
           setMessage({ type: 'success', text: 'Registration successful! Please check your email to confirm your account.' });
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        // Fix: Fallback for signInWithPassword (v2) or signIn (v1)
+        const signInMethod = auth.signInWithPassword ? auth.signInWithPassword.bind(auth) : auth.signIn.bind(auth);
+        const { error } = await signInMethod({
           email,
           password,
         });

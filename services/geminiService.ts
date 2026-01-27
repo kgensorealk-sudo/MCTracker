@@ -1,10 +1,4 @@
-import { Manuscript } from "../types";
 
-// Service disabled by user request
-export const generateJMQueryDraft = async (_manuscript: Manuscript, _issueDetail: string): Promise<string> => {
-  return "";
-};
-
-export const analyzeRisk = async (): Promise<string> => {
-  return "";
-};
+// Gemini Service disabled for redundancy reduction.
+export const generateJMQueryDraft = async (): Promise<string> => "Service Disabled";
+export const analyzeWorkload = async (): Promise<string> => "Service Disabled";

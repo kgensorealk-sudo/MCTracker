@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Access environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Access environment variables or use provided fallbacks
+// Using provided credentials to fix Offline Mode
+const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://xuowcacfxqikysuxuojs.supabase.co';
+const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1b3djYWNmeHFpa3lzdXh1b2pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MjE5MjIsImV4cCI6MjA4MjM5NzkyMn0.wF1cfXz6fd-gOS5MUy0DXeTIij0f-lkahM11SJESumw';
 
 // Check if we have valid keys
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;

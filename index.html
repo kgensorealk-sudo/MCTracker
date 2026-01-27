@@ -72,6 +72,24 @@
         100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
       }
 
+      /* Celebration Specific Animations */
+      @keyframes celebrationSlideIn {
+        0% { transform: translateY(-100%) scale(0.9); opacity: 0; }
+        60% { transform: translateY(20px) scale(1.05); opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
+      }
+
+      @keyframes confettiExplosion {
+        0% { transform: scale(0); opacity: 0; }
+        50% { opacity: 1; }
+        100% { transform: scale(2.5); opacity: 0; }
+      }
+
+      @keyframes floatSlow {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+      }
+
       /* Classes */
       .animate-fade-in-up { 
         animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
@@ -83,6 +101,17 @@
       
       .pulse-glow {
         animation: pulseGlow 2s infinite;
+      }
+
+      .animate-celebration {
+        animation: celebrationSlideIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      .confetti-layer {
+        position: absolute;
+        inset: -50px;
+        pointer-events: none;
+        animation: confettiExplosion 1.2s ease-out forwards;
       }
 
       /* Modal Classes */
@@ -125,7 +154,8 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.48.1"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.48.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0"
   }
 }
 </script>
