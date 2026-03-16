@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Manuscript, Status } from '../types';
+import { useManuscriptList } from '../hooks/useManuscriptList';
 import { Search, Edit2, AlertCircle, CheckCircle, Trash2, Inbox, AlertTriangle, Mail, CheckSquare, X, ChevronDown, ChevronUp, History, PlayCircle, Square, CheckSquare as CheckSquareIcon, FileText, RefreshCcw, Copy, Check } from 'lucide-react';
 
 interface ManuscriptListProps {
@@ -17,8 +18,14 @@ interface ManuscriptListProps {
 const ManuscriptList: React.FC<ManuscriptListProps> = ({ 
   manuscripts, onEdit, onDelete, onUpdate, onBulkUpdate, onBulkDelete, onBulkReview, activeFilter 
 }) => {
-  const [filterStatus, setFilterStatus] = useState<Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER'>(activeFilter);
-  const [search, setSearch] = useState('');
+  const {
+    search,
+    setSearch,
+    filterStatus,
+    setFilterStatus,
+    filteredManuscripts: filtered,
+  } = useManuscriptList(manuscripts, activeFilter);
+
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -50,21 +57,10 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  useEffect(() => setFilterStatus(activeFilter), [activeFilter]);
+  useEffect(() => setFilterStatus(activeFilter), [activeFilter, setFilterStatus]);
 
-  const filtered = useMemo(() => {
-    return manuscripts.filter(m => {
-      let matchesStatus = true;
-      if (filterStatus === 'PENDING_GROUP') matchesStatus = [Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status);
-      else if (filterStatus === 'HANDOVER') matchesStatus = m.status === Status.WORKED || m.status === Status.PENDING || m.status === Status.PENDING_JM;
-      else if (filterStatus !== 'ALL') matchesStatus = m.status === filterStatus;
-
-      const searchTerm = search.toLowerCase();
-      const matchesSearch = 
-        m.manuscriptId.toLowerCase().includes(searchTerm) || 
-        m.journalCode.toLowerCase().includes(searchTerm) ||
-        m.notes.some(n => n.content.toLowerCase().includes(searchTerm));
-
+  const filteredWithDates = useMemo(() => {
+    return filtered.filter(m => {
       let matchesDate = true;
       if (startDate || endDate) {
         const itemDate = new Date(m.dateStatusChanged || m.dateUpdated || m.dateReceived);
@@ -79,10 +75,9 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
           if (itemDate > end) matchesDate = false;
         }
       }
-
-      return matchesStatus && matchesSearch && matchesDate;
+      return matchesDate;
     });
-  }, [manuscripts, filterStatus, search, startDate, endDate]);
+  }, [filtered, startDate, endDate]);
 
   const getSlaInfo = (m: Manuscript) => {
     if (m.status === Status.WORKED || m.status === Status.BILLED || !m.dueDate) return null;
@@ -97,8 +92,8 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map(f => f.id)));
+    if (selectedIds.size === filteredWithDates.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredWithDates.map(f => f.id)));
   };
 
   const toggleRow = (id: string, e: React.MouseEvent) => {
@@ -241,7 +236,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Showing:</span>
               <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-black uppercase">
-                {filtered.length} of {manuscripts.length} Files
+                {filteredWithDates.length} of {manuscripts.length} Files
               </span>
             </div>
           </div>
@@ -253,7 +248,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
               <tr className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
                 <th className="px-8 py-5 w-12">
                    <button onClick={toggleAll} className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
-                      {selectedIds.size === filtered.length && filtered.length > 0 ? <CheckSquareIcon className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5 text-slate-300" />}
+                      {selectedIds.size === filteredWithDates.length && filteredWithDates.length > 0 ? <CheckSquareIcon className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5 text-slate-300" />}
                    </button>
                 </th>
                 <th className="px-6 py-5">Manuscript</th>
@@ -264,7 +259,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map(m => {
+              {filteredWithDates.map(m => {
                 const sla = getSlaInfo(m);
                 return (
                 <React.Fragment key={m.id}>
@@ -464,7 +459,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
               )})}
             </tbody>
           </table>
-          {filtered.length === 0 && (
+          {filteredWithDates.length === 0 && (
             <div className="py-24 text-center">
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                  <Inbox className="w-10 h-10 text-slate-200" />

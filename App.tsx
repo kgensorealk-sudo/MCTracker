@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmDialog from './components/ConfirmDialog';
-import { Manuscript, Status, UserSchedule } from './types';
+import { Manuscript, Status } from './types';
 import Dashboard from './components/Dashboard';
 import ManuscriptList from './components/ManuscriptList';
 import ManuscriptForm from './components/ManuscriptForm';
@@ -14,7 +14,7 @@ import BillingReconciliationModal from './components/BillingReconciliationModal'
 import { BillingCycleModal } from './components/BillingCycleModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { dataService } from './services/dataService';
+import { useAppData } from './hooks/useAppData';
 import { ACHIEVEMENTS } from './services/gamification';
 import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, History, Mail, Upload, Trophy, User } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
@@ -23,18 +23,23 @@ import { ToastContainer, ToastType } from './components/Toast';
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(!isSupabaseConfigured);
   const authInitRef = useRef(false);
 
-  // Data States
-  const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
-  const [targetPerCycle, setTargetPerCycle] = useState<number>(50);
-  const [userSchedule, setUserSchedule] = useState<UserSchedule>({ 
-    daysOff: [], 
-    weeklyWeights: [1, 1, 1, 1, 1, 1, 1],
-    cycleRates: {} 
-  });
+  const {
+    manuscripts,
+    setManuscripts,
+    targetPerCycle,
+    userSchedule,
+    loadData,
+    createManuscript,
+    updateManuscript,
+    updateManuscripts,
+    deleteManuscript,
+    updateTarget,
+    updateSchedule,
+    createManuscripts
+  } = useAppData(isOffline);
 
   // UI States
   const [view, setView] = useState<'dashboard' | 'list' | 'history'>('dashboard');
@@ -271,36 +276,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (session) loadData();
-  }, [session, isOffline]);
-
-  const loadData = async () => {
-    if (dataLoading) return;
-    setDataLoading(true);
-    try {
-      const [mss, settings] = await Promise.all([
-        dataService.getManuscripts(isOffline),
-        dataService.getUserSettings(isOffline)
-      ]);
-      setManuscripts(mss || []);
-      if (settings) {
-        setTargetPerCycle(settings.targetPerCycle);
-        setUserSchedule({ ...userSchedule, ...settings.userSchedule });
-      }
-    } finally {
-      setDataLoading(false);
-    }
-  };
+  }, [session, isOffline, loadData]);
 
   const handleSave = async (manuscript: Manuscript) => {
-    setDataLoading(true);
     try {
       if (editingId) {
-        const updated = await dataService.updateManuscript(manuscript, isOffline);
-        setManuscripts(prev => prev.map(m => m.id === updated.id ? updated : m));
+        await updateManuscript(manuscript);
         showToast(`Manuscript ${manuscript.manuscriptId} updated`);
       } else {
-        const created = await dataService.createManuscript(manuscript, isOffline);
-        setManuscripts(prev => [created, ...prev]);
+        await createManuscript(manuscript);
         showToast(`Manuscript ${manuscript.manuscriptId} created`);
       }
       if (isBulkReview && bulkQueue.length > 0) {
@@ -313,8 +297,8 @@ const App: React.FC = () => {
         setIsBulkReview(false);
         setBulkQueue([]);
       }
-    } finally {
-      setDataLoading(false);
+    } catch (error) {
+      console.error("Save error:", error);
     }
   };
 
@@ -375,9 +359,8 @@ const App: React.FC = () => {
   };
 
   const executeBulkUpdate = async (ids: string[], updates: Partial<Manuscript>) => {
-    setDataLoading(true);
     const now = new Date().toISOString();
-    setManuscripts(prev => prev.map(m => {
+    const updatedManuscripts = manuscripts.map(m => {
       if (!ids.includes(m.id)) return m;
       const itemUpdates: any = { ...updates, dateUpdated: now };
       if (updates.status && updates.status !== m.status) {
@@ -386,13 +369,10 @@ const App: React.FC = () => {
           itemUpdates.completedDate = now;
         }
         
-        // If marking as billed, ensure billedDate is set. 
-        // Default to completedDate if available to keep it in the same cycle.
         if (updates.status === Status.BILLED && !updates.billedDate && !m.billedDate) {
           itemUpdates.billedDate = updates.completedDate || itemUpdates.completedDate || m.completedDate || now;
         }
         
-        // Auto-remark for status change - Only if manual notes are NOT provided
         if (!updates.notes) {
           const statusLabels: Record<Status, string> = {
             [Status.WORKED]: 'Completed / Worked',
@@ -414,38 +394,30 @@ const App: React.FC = () => {
         }
       }
       return { ...m, ...itemUpdates };
-    }));
+    });
+
+    setManuscripts(updatedManuscripts);
+    
     try { 
-      // We need to make sure the dataService update also includes the new notes
-      const manuscriptsToUpdate = manuscripts.filter(m => ids.includes(m.id));
-      for (const m of manuscriptsToUpdate) {
-        const finalUpdates = { ...updates };
-        if (updates.status && updates.status !== m.status) {
-          (finalUpdates as any).dateStatusChanged = now;
-          if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
-            (finalUpdates as any).completedDate = now;
+      for (const id of ids) {
+        const m = updatedManuscripts.find(item => item.id === id);
+        if (m) {
+          const finalUpdates = { ...updates };
+          if (updates.status && updates.status !== m.status) {
+            (finalUpdates as any).dateStatusChanged = now;
+            if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
+              (finalUpdates as any).completedDate = now;
+            }
+            if (!updates.notes) {
+              (finalUpdates as any).notes = m.notes;
+            }
           }
-          if (!updates.notes) {
-            const statusLabels: Record<Status, string> = {
-              [Status.WORKED]: 'Completed / Worked',
-              [Status.PENDING]: 'Pending Query',
-              [Status.PENDING_JM]: 'Queried to JM',
-              [Status.PENDING_TL]: 'TL Query Raised',
-              [Status.PENDING_CED]: 'Email CED Sent',
-              [Status.BILLED]: 'Marked as Billed',
-              [Status.UNTOUCHED]: 'Reset to Untouched'
-            };
-            const autoNote = {
-              id: crypto.randomUUID(),
-              content: `Status updated to: ${statusLabels[updates.status] || updates.status}`,
-              timestamp: Date.now()
-            };
-            (finalUpdates as any).notes = [autoNote, ...(m.notes || [])];
-          }
+          await updateManuscripts([id], finalUpdates);
         }
-        await dataService.updateManuscripts([m.id], finalUpdates, isOffline);
       }
-    } finally { setDataLoading(false); }
+    } catch (error) {
+      console.error("Bulk update error:", error);
+    }
   };
 
   const handleBulkReview = (ids: string[]) => {
@@ -461,12 +433,12 @@ const App: React.FC = () => {
       "Delete Record",
       "Are you sure you want to delete this record permanently? This action cannot be undone.",
       async () => {
-        setDataLoading(true);
         try {
-          await dataService.deleteManuscript(id, isOffline);
-          setManuscripts(prev => prev.filter(m => m.id !== id));
+          await deleteManuscript(id);
           showToast('Manuscript deleted', 'info');
-        } finally { setDataLoading(false); }
+        } catch (error) {
+          console.error("Delete error:", error);
+        }
       }
     );
   };
@@ -476,30 +448,25 @@ const App: React.FC = () => {
       "Bulk Delete",
       `Are you sure you want to delete ${ids.length} records permanently? This action cannot be undone.`,
       async () => {
-        setDataLoading(true);
         try {
           for (const id of ids) {
-            await dataService.deleteManuscript(id, isOffline);
+            await deleteManuscript(id);
           }
-          setManuscripts(prev => prev.filter(m => !ids.includes(m.id)));
           showToast(`${ids.length} manuscripts deleted`, 'info');
-        } finally { setDataLoading(false); }
+        } catch (error) {
+          console.error("Bulk delete error:", error);
+        }
       }
     );
   };
 
   const handleBulkImport = async (newItems: Manuscript[]) => {
-    setDataLoading(true);
     try {
-      const createdItems = await dataService.createManuscripts(newItems, isOffline);
-      if (createdItems && createdItems.length > 0) {
-        setManuscripts(prev => [...createdItems, ...prev]);
-        setListFilter('ALL');
-        setView('list'); 
-        showToast(`${createdItems.length} items imported successfully`);
-      } else {
-        throw new Error("No items were created. This might be due to duplicates in the database.");
-      }
+      await createManuscripts(newItems);
+      await loadData();
+      setListFilter('ALL');
+      setView('list'); 
+      showToast(`${newItems.length} items imported successfully`);
     } catch (error: any) {
       console.error("Bulk import error:", error);
       const errorMessage = error.message || "Failed to import items. Please check your connection or database setup.";
@@ -510,23 +477,19 @@ const App: React.FC = () => {
         'info',
         'Acknowledged'
       );
-    } finally {
-      setDataLoading(false);
     }
   };
 
   const handleMarkReported = async (ids: string[]) => {
     const now = new Date().toISOString();
-    setManuscripts(prev => prev.map(m => ids.includes(m.id) ? { ...m, dateEmailed: now } : m));
-    await dataService.updateManuscripts(ids, { dateEmailed: now }, isOffline);
+    await updateManuscripts(ids, { dateEmailed: now });
     showToast(`${ids.length} items marked as reported`);
   };
 
   const handleUpdateRate = (cycleId: string, rate: { usd: number; php: number }) => {
     const newRates = { ...(userSchedule.cycleRates || {}), [cycleId]: rate };
     const updatedSchedule = { ...userSchedule, cycleRates: newRates };
-    setUserSchedule(updatedSchedule);
-    dataService.updateSchedule(updatedSchedule, isOffline);
+    updateSchedule(updatedSchedule);
     showToast(`Billing rates updated for ${cycleId}`, 'info');
   };
 
@@ -681,17 +644,9 @@ const App: React.FC = () => {
                 manuscripts={manuscripts} 
                 target={targetPerCycle}
                 userSchedule={userSchedule}
-                onUpdateTarget={(t) => { 
-                  setTargetPerCycle(t); 
-                  dataService.updateTarget(t, isOffline); 
-                  showToast(`Target updated to ${t} files`, 'info');
-                }}
+                onUpdateTarget={updateTarget}
                 onFilterClick={(f) => { setListFilter(f); setView('list'); }}
-                onUpdateSchedule={(s) => { 
-                  setUserSchedule(s); 
-                  dataService.updateSchedule(s, isOffline); 
-                  showToast('Work schedule updated', 'info');
-                }}
+                onUpdateSchedule={updateSchedule}
                 onViewHistory={() => setView('history')}
               />
             )}
