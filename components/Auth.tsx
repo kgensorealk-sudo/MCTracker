@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, ArrowRight, User } from 'lucide-react';
@@ -17,10 +16,8 @@ export const Auth: React.FC = () => {
     setMessage(null);
 
     try {
-      const auth = supabase.auth as any;
       if (isSignUp) {
-        // Fix: Casting for Supabase version compatibility
-        const { error, data, user } = await auth.signUp({
+        const { error, data } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -31,26 +28,35 @@ export const Auth: React.FC = () => {
         });
         if (error) throw error;
         
-        const resultUser = user || data?.user;
-        const resultSession = data?.session;
-        
-        if (resultUser && !resultSession) {
+        if (data.user && !data.session) {
           setMessage({ type: 'success', text: 'Registration successful! Please check your email to confirm your account.' });
         }
       } else {
-        // Fix: Fallback for signInWithPassword (v2) or signIn (v1)
-        const signInMethod = auth.signInWithPassword ? auth.signInWithPassword.bind(auth) : auth.signIn.bind(auth);
-        const { error } = await signInMethod({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+        
+        // If we got a session, we can optionally trigger a refresh or just let onAuthStateChange handle it.
+        // But to be safe in iframes, we can reload or notify parent.
+        if (data.session) {
+          // Small delay to ensure persistence
+          setTimeout(() => window.location.reload(), 500);
+        }
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'An error occurred' });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDemoMode = () => {
+    // This will trigger the enterOfflineMode in App.tsx if we provide a way
+    // For now, we can just set a flag in localStorage and reload
+    localStorage.setItem('mc_tracker_force_offline', 'true');
+    window.location.reload();
   };
 
   return (
@@ -180,6 +186,14 @@ export const Auth: React.FC = () => {
                 className="w-full inline-flex justify-center items-center gap-2 py-2 px-4 border border-transparent rounded-lg text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
               >
                 {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'} <ArrowRight className="w-4 h-4" />
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleDemoMode}
+                className="w-full inline-flex justify-center items-center gap-2 py-2 px-4 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+              >
+                Continue in Demo Mode (Offline)
               </button>
             </div>
           </div>

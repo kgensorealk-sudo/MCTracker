@@ -1,4 +1,3 @@
-
-// Gemini Service disabled for redundancy reduction.
-export const generateJMQueryDraft = async (): Promise<string> => "Service Disabled";
-export const analyzeWorkload = async (): Promise<string> => "Service Disabled";
+// Gemini AI service removed.
+export const generateJMQueryDraft = async (): Promise<string> => "AI drafting disabled.";
+export const analyzeRisk = async (): Promise<string> => "";

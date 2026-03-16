@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status, Note } from '../types';
-import { X, Save, Edit2, Trash2, Plus, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
-import ConfirmationModal from './ConfirmationModal';
+import ConfirmDialog from './ConfirmDialog';
+import { X, Save, Edit2, Trash2, Plus, RefreshCw, ArrowRight, AlertTriangle, AlertCircle, Mail, CheckSquare, Copy, Check } from 'lucide-react';
 
 interface ManuscriptFormProps {
   initialData?: Manuscript;
@@ -34,9 +34,16 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
   
   const [currentNote, setCurrentNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [confirmDeleteNote, setConfirmDeleteNote] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  // Custom Confirmation States
-  const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<{ isOpen: boolean, noteId: string | null }>({ isOpen: false, noteId: null });
+  const handleCopy = () => {
+    if (formData.manuscriptId) {
+      navigator.clipboard.writeText(formData.manuscriptId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -55,7 +62,11 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       if (formData.status === Status.WORKED && !formData.completedDate) {
         updates.completedDate = now;
       }
-      setFormData(prev => ({ ...prev, ...updates }));
+      
+      setFormData(prev => ({ 
+        ...prev, 
+        ...updates
+      }));
       setPrevStatus(formData.status);
     }
   }, [formData.status, prevStatus, formData.completedDate]);
@@ -114,18 +125,20 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
     setEditingNoteId(null);
   };
 
-  const executeDeleteNote = () => {
-    const noteId = deleteNoteConfirm.noteId;
-    if (!noteId) return;
-    
+  const handleDeleteNote = (noteId: string) => {
+    setConfirmDeleteNote(noteId);
+  };
+
+  const confirmDelete = () => {
+    if (!confirmDeleteNote) return;
     setFormData(prev => ({
       ...prev,
-      notes: prev.notes?.filter(n => n.id !== noteId) || []
+      notes: prev.notes?.filter(n => n.id !== confirmDeleteNote) || []
     }));
-    if (editingNoteId === noteId) {
+    if (editingNoteId === confirmDeleteNote) {
       handleCancelEdit();
     }
-    setDeleteNoteConfirm({ isOpen: false, noteId: null });
+    setConfirmDeleteNote(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -142,20 +155,46 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       return;
     }
 
+    // Handle auto-note if status changed and no manual note was added
+    let finalNotes = [...(formData.notes || [])];
+    const statusChanged = formData.status !== initialData?.status;
+    const manualNoteAdded = finalNotes.length > (initialData?.notes?.length || 0);
+
+    if (statusChanged && !manualNoteAdded) {
+      const statusLabels: Record<Status, string> = {
+        [Status.WORKED]: 'Completed / Worked',
+        [Status.PENDING]: 'Pending (Queried)',
+        [Status.PENDING_JM]: 'Queried to JM',
+        [Status.PENDING_TL]: 'TL Query Raised',
+        [Status.PENDING_CED]: 'Email CED Sent',
+        [Status.BILLED]: 'Marked as Billed',
+        [Status.UNTOUCHED]: 'Reset to Untouched'
+      };
+      
+      const autoNote: Note = {
+        id: crypto.randomUUID(),
+        content: `Status updated to: ${statusLabels[formData.status!] || formData.status}`,
+        timestamp: Date.now()
+      };
+      finalNotes = [autoNote, ...finalNotes];
+    }
+
     const manuscript: Manuscript = {
       id: initialData?.id || crypto.randomUUID(),
       manuscriptId: formData.manuscriptId!,
       journalCode: formData.journalCode!,
       status: formData.status || Status.UNTOUCHED,
+      pendingFlags: formData.pendingFlags || { jm: false, tl: false, ced: false },
       priority: formData.priority || 'Normal',
       dateReceived: formData.dateReceived || new Date().toISOString(),
       dueDate: formData.dueDate,
       completedDate: formData.status === Status.WORKED ? formData.completedDate : undefined,
       dateUpdated: new Date().toISOString(),
       dateStatusChanged: formData.dateStatusChanged || new Date().toISOString(),
-      notes: formData.notes || [],
+      notes: finalNotes,
     };
     
+    // For save, we usually don't need exit animation, but let's do it for consistency
     setIsClosing(true);
     setTimeout(() => onSave(manuscript), 200);
   };
@@ -187,17 +226,29 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1.5">Manuscript ID</label>
-              <input
-                required
-                type="text"
-                placeholder="e.g. JRNL-2023-456"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium"
-                value={formData.manuscriptId}
-                onChange={e => {
-                  setFormData({...formData, manuscriptId: e.target.value});
-                  setError(null);
-                }}
-              />
+              <div className="relative group/id">
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. JRNL-2023-456"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium pr-12"
+                  value={formData.manuscriptId}
+                  onChange={e => {
+                    setFormData({...formData, manuscriptId: e.target.value});
+                    setError(null);
+                  }}
+                />
+                {formData.manuscriptId && (
+                  <button 
+                    type="button"
+                    onClick={handleCopy}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${copied ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                    title="Copy Manuscript ID"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1.5">Journal Code</label>
@@ -240,6 +291,92 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1.5">Current Status</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, status: Status.WORKED})}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${formData.status === Status.WORKED ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-100' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
+                  >
+                    Worked
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, status: Status.PENDING})}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${formData.status === Status.PENDING || [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(formData.status as Status) ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-100' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50'}`}
+                  >
+                    Pending
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, status: Status.UNTOUCHED})}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${formData.status === Status.UNTOUCHED ? 'bg-slate-600 text-white border-slate-600 shadow-md shadow-slate-100' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Untouched
+                  </button>
+                </div>
+
+                {(formData.status === Status.PENDING || [Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(formData.status as Status)) && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Active Queries (Select all that apply)</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const flags = formData.pendingFlags || { jm: false, tl: false, ced: false };
+                          const newFlags = { ...flags, jm: !flags.jm };
+                          setFormData({
+                            ...formData,
+                            status: Status.PENDING,
+                            pendingFlags: newFlags
+                          });
+                        }}
+                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${formData.pendingFlags?.jm || formData.status === Status.PENDING_JM ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-100' : 'bg-white text-rose-600 border-rose-200 hover:bg-rose-50'}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" /> JM Query
+                        </span>
+                        {(formData.pendingFlags?.jm || formData.status === Status.PENDING_JM) && <CheckSquare className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const flags = formData.pendingFlags || { jm: false, tl: false, ced: false };
+                          const newFlags = { ...flags, tl: !flags.tl };
+                          setFormData({
+                            ...formData,
+                            status: Status.PENDING,
+                            pendingFlags: newFlags
+                          });
+                        }}
+                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${formData.pendingFlags?.tl || formData.status === Status.PENDING_TL ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-100' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50'}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" /> TL Query
+                        </span>
+                        {(formData.pendingFlags?.tl || formData.status === Status.PENDING_TL) && <CheckSquare className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const flags = formData.pendingFlags || { jm: false, tl: false, ced: false };
+                          const newFlags = { ...flags, ced: !flags.ced };
+                          setFormData({
+                            ...formData,
+                            status: Status.PENDING,
+                            pendingFlags: newFlags
+                          });
+                        }}
+                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${formData.pendingFlags?.ced || formData.status === Status.PENDING_CED ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-100' : 'bg-white text-violet-600 border-violet-200 hover:bg-violet-50'}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Mail className="w-4 h-4" /> Email CED
+                        </span>
+                        {(formData.pendingFlags?.ced || formData.status === Status.PENDING_CED) && <CheckSquare className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="relative">
                   <select
                     className="w-full pl-3 pr-8 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none bg-white font-medium"
@@ -247,12 +384,9 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                     onChange={e => setFormData({...formData, status: e.target.value as Status})}
                   >
                     <option value={Status.UNTOUCHED}>Untouched (New)</option>
-                    <optgroup label="Pending / Issues">
-                      <option value={Status.PENDING_JM}>Pending: JM Query</option>
-                      <option value={Status.PENDING_TL}>Pending: TL Query</option>
-                      <option value={Status.PENDING_CED}>Pending: Email CED</option>
-                    </optgroup>
+                    <option value={Status.PENDING}>Pending (Multi-Query)</option>
                     <option value={Status.WORKED}>Completed</option>
+                    <option value={Status.BILLED}>Billed</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
                     <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -367,7 +501,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDeleteNoteConfirm({ isOpen: true, noteId: note.id })}
+                      onClick={() => handleDeleteNote(note.id)}
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                       title="Delete Remark"
                     >
@@ -408,17 +542,14 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
             </button>
           </div>
         </form>
-
-        <ConfirmationModal
-          isOpen={deleteNoteConfirm.isOpen}
-          title="Delete Remark?"
-          message="Are you sure you want to remove this remark? This action cannot be undone."
-          variant="danger"
-          confirmLabel="Delete Remark"
-          onConfirm={executeDeleteNote}
-          onCancel={() => setDeleteNoteConfirm({ isOpen: false, noteId: null })}
-        />
       </div>
+      <ConfirmDialog 
+        isOpen={!!confirmDeleteNote}
+        title="Delete Remark"
+        message="Are you sure you want to delete this remark? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteNote(null)}
+      />
     </div>
   );
 };
