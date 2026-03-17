@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Manuscript, Status, Note } from '../types';
+import { getQuickNotesForStatus } from '../constants';
 import ConfirmDialog from './ConfirmDialog';
 import { X, Save, Edit2, Trash2, Plus, RefreshCw, ArrowRight, AlertTriangle, AlertCircle, Mail, CheckSquare, Copy, Check } from 'lucide-react';
 
@@ -36,6 +37,10 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [confirmDeleteNote, setConfirmDeleteNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const getQuickNotes = () => {
+    return getQuickNotesForStatus(formData.status || Status.UNTOUCHED, formData.pendingFlags);
+  };
 
   const handleCopy = () => {
     if (formData.manuscriptId) {
@@ -447,6 +452,20 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Remarks {editingNoteId && <span className="text-blue-600 ml-2 font-normal animate-pulse">(Editing Mode)</span>}
             </label>
+            
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {getQuickNotes().map((note, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setCurrentNote(note)}
+                  className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 rounded-lg text-[10px] font-bold border border-slate-200 hover:border-blue-200 transition-all shadow-sm"
+                >
+                  {note}
+                </button>
+              ))}
+            </div>
+
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
