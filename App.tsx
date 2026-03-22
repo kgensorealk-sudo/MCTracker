@@ -384,9 +384,17 @@ const App: React.FC = () => {
             [Status.UNTOUCHED]: 'Reset to Untouched'
           };
           
+          let noteContent = `Status updated to: ${statusLabels[updates.status] || updates.status}`;
+          
+          // Auto-remark for JM Query resolution
+          const wasQueried = m.status === Status.PENDING_JM || (m.status === Status.PENDING && m.pendingFlags?.jm);
+          if (wasQueried && updates.status === Status.WORKED) {
+            noteContent = "Resolved from JM Query - Marked as Worked";
+          }
+
           const autoNote = {
             id: crypto.randomUUID(),
-            content: `Status updated to: ${statusLabels[updates.status] || updates.status}`,
+            content: noteContent,
             timestamp: Date.now()
           };
           
@@ -648,6 +656,7 @@ const App: React.FC = () => {
                 onFilterClick={(f) => { setListFilter(f); setView('list'); }}
                 onUpdateSchedule={updateSchedule}
                 onViewHistory={() => setView('history')}
+                onUpdate={handleQuickUpdate}
               />
             )}
             {view === 'list' && (

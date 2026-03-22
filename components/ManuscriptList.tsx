@@ -26,6 +26,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
     filterStatus,
     setFilterStatus,
     filteredManuscripts: filtered,
+    statusCounts
   } = useManuscriptList(manuscripts, activeFilter);
 
   const { startDate: cycleStart, endDate: cycleEnd, cycleLabel } = useCycleDates();
@@ -209,9 +210,14 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
                 <button
                   key={key}
                   onClick={() => setFilterStatus(key as any)}
-                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${filterStatus === key ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 ${filterStatus === key ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
                 >
-                  {key === 'ALL' ? 'All Files' : key === 'PENDING_GROUP' ? 'All Pending' : key === 'HANDOVER' ? 'Worked & JM' : key === Status.UNTOUCHED ? 'Untouched' : key === Status.WORKED ? 'Worked' : 'Billed'}
+                  <span>
+                    {key === 'ALL' ? 'All Files' : key === 'PENDING_GROUP' ? 'All Pending' : key === 'HANDOVER' ? 'Worked & JM' : key === Status.UNTOUCHED ? 'Untouched' : key === Status.WORKED ? 'Worked' : 'Billed'}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filterStatus === key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {statusCounts[key as keyof typeof statusCounts] || 0}
+                  </span>
                 </button>
               ))}
             </div>
@@ -311,7 +317,7 @@ const ManuscriptList: React.FC<ManuscriptListProps> = ({
                              <p className="text-sm font-bold text-slate-900 leading-tight">{m.manuscriptId}</p>
                              <button 
                                onClick={(e) => { e.stopPropagation(); handleCopy(m.id, m.manuscriptId); }}
-                               className={`p-1 rounded transition-all ${copiedId === m.id ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 opacity-0 group-hover:opacity-100'}`}
+                               className={`p-1 rounded transition-all ${copiedId === m.id ? 'text-emerald-500 bg-emerald-50' : 'text-slate-500 hover:text-indigo-600 hover:bg-slate-100 opacity-40 group-hover:opacity-100'}`}
                                title="Copy Manuscript ID"
                              >
                                {copiedId === m.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}

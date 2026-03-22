@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line } from 'recharts';
 import { Manuscript, Status, UserSchedule } from '../types';
-import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, Coffee, Settings, Briefcase, Info, Trophy, AlertTriangle, Timer, Flame, Target, Calendar, Coins, RefreshCcw, History as HistoryIcon, Mail } from 'lucide-react';
+import { AlertCircle, CheckCircle, Zap, Inbox, TrendingUp, Activity, Coffee, Settings, Briefcase, Info, Trophy, AlertTriangle, Timer, Flame, Target, Calendar, Coins, RefreshCcw, History as HistoryIcon, Mail, X, Copy, Check } from 'lucide-react';
 import { calculateXP, calculateLevel, ALL_DAILY_QUESTS, ACHIEVEMENTS } from '../services/gamification';
 import { useCycleDates } from '../hooks/useCycleDates';
 
@@ -15,6 +15,7 @@ interface DashboardProps {
   onFilterClick: (status: Status | 'ALL' | 'PENDING_GROUP' | 'HANDOVER') => void;
   onUpdateSchedule: (schedule: UserSchedule) => void;
   onViewHistory?: () => void;
+  onUpdate?: (id: string, updates: Partial<Manuscript>) => void;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -106,10 +107,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUpdateTarget, 
   onFilterClick,
   onUpdateSchedule,
-  onViewHistory
+  onViewHistory,
+  onUpdate
 }) => {
   const [showScheduleSettings, setShowScheduleSettings] = useState(false);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
+  const [selectedJMFileId, setSelectedJMFileId] = useState<string | null>(null);
+  const [quickUpdateDate, setQuickUpdateDate] = useState(getLocalISODate(new Date()));
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   // Default weights if missing (Full week)
   const weights = userSchedule.weeklyWeights || [1, 1, 1, 1, 1, 1, 1];
@@ -194,7 +205,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [manuscripts, cycleDates]);
 
   // --- Efficiency Insights & Urgent Watchlist ---
-  const { insights, urgentItems, recentActivity } = useMemo(() => {
+  const { insights, urgentItems, jmQueriedItems, recentActivity } = useMemo(() => {
     // 1. Efficiency Insights
     const worked = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.BILLED);
     
@@ -231,30 +242,55 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     // 2. Urgent Watchlist
     const urgent = manuscripts
-        .filter(m => m.status !== Status.WORKED && m.status !== Status.BILLED && m.priority === 'Urgent')
+        .filter(m => {
+            if (m.priority !== 'Urgent') return false;
+            if (m.status === Status.WORKED || m.status === Status.BILLED) return false;
+            
+            const isUntouched = m.status === Status.UNTOUCHED;
+            const isTL = m.status === Status.PENDING_TL || (m.status === Status.PENDING && m.pendingFlags?.tl);
+            const isCED = m.status === Status.PENDING_CED || (m.status === Status.PENDING && m.pendingFlags?.ced);
+            
+            return isUntouched || isTL || isCED;
+        })
         .sort((a, b) => new Date(a.dateReceived).getTime() - new Date(b.dateReceived).getTime())
-        .slice(0, 3);
+        .slice(0, 10);
 
-    // 3. Recent Activity (Last 8 modified)
+    // 3. Recent Activity (Last 20 modified)
     const recent = [...manuscripts]
         .sort((a, b) => new Date(b.dateUpdated).getTime() - new Date(a.dateUpdated).getTime())
-        .slice(0, 8)
+        .slice(0, 20)
         .map(m => {
             let action = "Updated";
             if (m.status === Status.WORKED) action = "Completed";
-            else if (m.status.startsWith('PENDING')) action = "Queried";
+            else if (m.status === Status.PENDING_CED) action = "Emailed CED";
+            else if (m.status === Status.PENDING_JM) action = "Queried JM";
+            else if (m.status === Status.PENDING_TL) action = "TL Query";
+            else if (m.status === Status.PENDING) action = "Queried";
             else if (m.status === Status.BILLED) action = "Billed";
             else if (m.status === Status.UNTOUCHED && m.dateUpdated === m.dateReceived) action = "Imported";
             
             return { ...m, action };
         });
 
+    // 4. JM Queried Files
+    const jmQueried = manuscripts
+        .filter(m => m.status === Status.PENDING_JM || (m.status === Status.PENDING && m.pendingFlags?.jm))
+        .sort((a, b) => new Date(a.dateStatusChanged || a.dateUpdated).getTime() - new Date(b.dateStatusChanged || b.dateUpdated).getTime());
+
     return { 
         insights: { tat: avgTat, streak },
         urgentItems: urgent,
+        jmQueriedItems: jmQueried,
         recentActivity: recent
     };
   }, [manuscripts]);
+
+  const getDaysInStatus = (dateStr?: string) => {
+    if (!dateStr) return 0;
+    const start = new Date(dateStr).getTime();
+    const now = new Date().getTime();
+    return Math.floor((now - start) / (1000 * 3600 * 24));
+  };
 
   const projection = useMemo(() => {
     const { startDate, endDate } = cycleDates;
@@ -1410,53 +1446,184 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Bottom Section: Watchlist & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          
-         {/* Urgent Watchlist */}
-         <motion.div 
-           initial={{ opacity: 0, x: -10 }}
-           animate={{ opacity: 1, x: 0 }}
-           transition={{ duration: 0.3 }}
-           className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8"
-         >
-            <div className="flex items-center justify-between mb-8">
-               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
-                  <AlertCircle className="w-6 h-6 text-rose-500" /> Urgent Watchlist
-               </h3>
-               {urgentItems.length > 0 && (
-                  <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-100 px-3 py-1 rounded-full uppercase tracking-wider">
-                    {urgentItems.length} items
-                  </span>
-               )}
-            </div>
-            
-            <div className="space-y-4">
-               {urgentItems.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-                     <CheckCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                     <p className="text-sm font-bold">No urgent items pending.</p>
-                  </div>
-               ) : (
-                  urgentItems.map(item => (
-                     <motion.div 
-                       key={item.id} 
-                       whileHover={{ x: 4 }}
-                       className="flex items-center justify-between p-4 bg-rose-50/30 border border-rose-100 rounded-2xl hover:bg-rose-50 transition-colors"
-                     >
-                        <div className="flex items-center gap-4">
-                           <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div>
-                           <div>
-                              <p className="text-sm font-black text-slate-900">{item.manuscriptId}</p>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{item.journalCode}</p>
+         <div className="flex flex-col gap-6">
+            {/* Urgent Watchlist */}
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8"
+            >
+               <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
+                     <AlertCircle className="w-6 h-6 text-rose-500" /> Urgent Watchlist
+                  </h3>
+                  {urgentItems.length > 0 && (
+                     <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-100 px-3 py-1 rounded-full uppercase tracking-wider">
+                       {urgentItems.length} items
+                     </span>
+                  )}
+               </div>
+               
+               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
+                  {urgentItems.length === 0 ? (
+                     <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                        <CheckCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                        <p className="text-sm font-bold">No urgent items pending.</p>
+                     </div>
+                  ) : (
+                     urgentItems.map(item => (
+                        <motion.div 
+                          key={item.id} 
+                          whileHover={{ x: 4 }}
+                          className="flex items-center justify-between p-4 bg-rose-50/30 border border-rose-100 rounded-2xl hover:bg-rose-50 transition-colors"
+                        >
+                           <div className="flex items-center gap-4">
+                              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div>
+                               <div>
+                                  <div className="flex items-center gap-2">
+                                     <p className="text-sm font-black text-slate-900">{item.manuscriptId}</p>
+                                     <button 
+                                       onClick={(e) => { e.stopPropagation(); handleCopy(item.id, item.manuscriptId); }}
+                                       className={`p-1 rounded transition-all ${copiedId === item.id ? 'text-emerald-500 bg-emerald-50' : 'text-slate-500 hover:text-rose-600 hover:bg-rose-100 opacity-40 group-hover:opacity-100'}`}
+                                       title="Copy Manuscript ID"
+                                     >
+                                       {copiedId === item.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                     </button>
+                                  </div>
+                                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{item.journalCode}</p>
+                               </div>
                            </div>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-xs font-black text-rose-600 uppercase tracking-wider">Due {item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'ASAP'}</p>
-                           <p className="text-[10px] text-slate-400 font-bold mt-1">Rec: {new Date(item.dateReceived).toLocaleDateString()}</p>
-                        </div>
-                     </motion.div>
-                  ))
-               )}
-            </div>
-         </motion.div>
+                           <div className="text-right">
+                              <p className="text-xs font-black text-rose-600 uppercase tracking-wider">Due {item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'ASAP'}</p>
+                              <p className="text-[10px] text-slate-400 font-bold mt-1">Rec: {new Date(item.dateReceived).toLocaleDateString()}</p>
+                           </div>
+                        </motion.div>
+                     ))
+                  )}
+               </div>
+            </motion.div>
+
+            {/* JM Queried Section */}
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8"
+            >
+               <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
+                     <Mail className="w-6 h-6 text-indigo-500" /> JM Queried Files
+                  </h3>
+                  {jmQueriedItems.length > 0 && (
+                     <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider">
+                       {jmQueriedItems.length} items
+                     </span>
+                  )}
+               </div>
+               
+               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
+                  {jmQueriedItems.length === 0 ? (
+                     <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                        <CheckCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                        <p className="text-sm font-bold">No items currently with JM.</p>
+                     </div>
+                  ) : (
+                     jmQueriedItems.map((item: Manuscript) => {
+                        const days = getDaysInStatus(item.dateStatusChanged || item.dateUpdated);
+                        const isSelected = selectedJMFileId === item.id;
+                        return (
+                          <div key={item.id} className="relative">
+                            <motion.div 
+                              whileHover={{ x: 4 }}
+                              onClick={() => setSelectedJMFileId(isSelected ? null : item.id)}
+                              className={`flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer border ${
+                                isSelected 
+                                  ? 'bg-indigo-600 border-indigo-700 shadow-lg shadow-indigo-200 text-white' 
+                                  : 'bg-indigo-50/30 border-indigo-100 hover:bg-indigo-50 text-slate-900'
+                              }`}
+                            >
+                               <div className="flex items-center gap-4">
+                                  <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : (days >= 3 ? 'bg-rose-500 animate-pulse' : 'bg-indigo-500')}`}></div>
+                                  <div>
+                                     <div className="flex items-center gap-2">
+                                        <p className={`text-sm font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>{item.manuscriptId}</p>
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); handleCopy(item.id, item.manuscriptId); }}
+                                          className={`p-1 rounded transition-all ${
+                                            copiedId === item.id 
+                                              ? (isSelected ? 'text-white bg-white/20' : 'text-emerald-500 bg-emerald-50') 
+                                              : (isSelected ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-100 opacity-40 group-hover:opacity-100')
+                                          }`}
+                                          title="Copy Manuscript ID"
+                                        >
+                                          {copiedId === item.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                        </button>
+                                     </div>
+                                     <p className={`text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>{item.journalCode}</p>
+                                  </div>
+                               </div>
+                               <div className="text-right">
+                                  <p className={`text-xs font-black uppercase tracking-wider ${isSelected ? 'text-white' : (days >= 3 ? 'text-rose-600' : 'text-indigo-600')}`}>
+                                    {days === 0 ? 'Today' : `${days} Day${days > 1 ? 's' : ''} with JM`}
+                                  </p>
+                                  <p className={`text-[10px] font-bold mt-1 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>Queried: {new Date(item.dateStatusChanged || item.dateUpdated).toLocaleDateString()}</p>
+                               </div>
+                            </motion.div>
+
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                  animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+                                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-4">
+                                     <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Completion Date</label>
+                                        <input 
+                                          type="date" 
+                                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                          value={quickUpdateDate}
+                                          onChange={(e) => setQuickUpdateDate(e.target.value)}
+                                        />
+                                     </div>
+                                     <div className="flex gap-2">
+                                        <button 
+                                          onClick={() => {
+                                            if (onUpdate) {
+                                              const completedDate = new Date(quickUpdateDate).toISOString();
+                                              onUpdate(item.id, { 
+                                                status: Status.WORKED, 
+                                                completedDate,
+                                                dateStatusChanged: completedDate
+                                              });
+                                              setSelectedJMFileId(null);
+                                            }
+                                          }}
+                                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                                        >
+                                          <CheckCircle className="w-3.5 h-3.5" /> Mark Worked
+                                        </button>
+                                        <button 
+                                          onClick={() => setSelectedJMFileId(null)}
+                                          className="px-4 bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                     </div>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                     })
+                  )}
+               </div>
+            </motion.div>
+         </div>
 
          {/* Recent Activity */}
          <motion.div 
@@ -1477,7 +1644,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                </div>
             </div>
             
-            <div className="flex-1 space-y-1 relative">
+            <div className="flex-1 space-y-1 relative max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
                {/* Timeline Line */}
                {recentActivity.length > 0 && (
                   <div className="absolute left-[19px] top-2 bottom-2 w-px bg-gradient-to-b from-slate-200 via-slate-100 to-transparent" />
@@ -1502,12 +1669,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                      >
                         <div className={`relative z-10 w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-110 ${
                            item.status === Status.WORKED ? 'bg-emerald-500 text-white shadow-emerald-200' :
-                           item.status.startsWith('PENDING') ? 'bg-amber-500 text-white shadow-amber-200' :
+                           item.status === Status.PENDING_CED ? 'bg-violet-500 text-white shadow-violet-200' :
+                           item.status === Status.PENDING_JM ? 'bg-rose-500 text-white shadow-rose-200' :
+                           item.status === Status.PENDING_TL ? 'bg-amber-500 text-white shadow-amber-200' :
+                           item.status === Status.PENDING ? 'bg-amber-500 text-white shadow-amber-200' :
                            item.status === Status.BILLED ? 'bg-indigo-500 text-white shadow-indigo-200' :
                            'bg-slate-400 text-white shadow-slate-200'
                         }`}>
                            {item.status === Status.WORKED ? <CheckCircle className="w-5 h-5" /> : 
-                            item.status.startsWith('PENDING') ? <AlertTriangle className="w-5 h-5" /> : 
+                            item.status === Status.PENDING_CED ? <Mail className="w-5 h-5" /> :
+                            item.status === Status.PENDING_JM ? <AlertCircle className="w-5 h-5" /> :
+                            item.status === Status.PENDING_TL ? <AlertTriangle className="w-5 h-5" /> :
+                            item.status === Status.PENDING ? <AlertTriangle className="w-5 h-5" /> : 
                             item.status === Status.BILLED ? <Coins className="w-5 h-5" /> :
                             <RefreshCcw className="w-5 h-5" />}
                         </div>
@@ -1515,10 +1688,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <div className="flex-1 min-w-0">
                            <div className="flex justify-between items-start gap-2">
                               <div>
-                                 <p className="text-sm font-black text-slate-800 truncate group-hover:text-brand-600 transition-colors">{item.manuscriptId}</p>
+                                 <div className="flex items-center gap-2">
+                                    <p className="text-sm font-black text-slate-800 truncate group-hover:text-brand-600 transition-colors">{item.manuscriptId}</p>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleCopy(item.id, item.manuscriptId); }}
+                                      className={`p-1 rounded transition-all ${copiedId === item.id ? 'text-emerald-500 bg-emerald-50' : 'text-slate-500 hover:text-brand-600 hover:bg-slate-100 opacity-40 group-hover:opacity-100'}`}
+                                      title="Copy Manuscript ID"
+                                    >
+                                      {copiedId === item.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    </button>
+                                 </div>
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] mt-0.5">
                                     {item.journalCode} • <span className={
                                        item.action === 'Completed' ? 'text-emerald-600' :
+                                       item.action === 'Emailed CED' ? 'text-violet-600' :
+                                       item.action === 'Queried JM' ? 'text-rose-600' :
+                                       item.action === 'TL Query' ? 'text-amber-600' :
                                        item.action === 'Queried' ? 'text-amber-600' :
                                        item.action === 'Billed' ? 'text-indigo-600' :
                                        'text-slate-500'

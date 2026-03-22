@@ -26,11 +26,14 @@ export const useManuscriptList = (manuscripts: Manuscript[], activeFilter: Statu
     });
   }, [manuscripts, filterStatus, search]);
 
-  const statusCounts = useMemo((): Record<Status, number> => {
-    const counts: Record<Status, number> = {
+  const counts = useMemo(() => {
+    const counts = {
+      ALL: manuscripts.length,
+      PENDING_GROUP: 0,
+      HANDOVER: 0,
       [Status.UNTOUCHED]: 0,
       [Status.WORKED]: 0,
-      [Status.PENDING]: 0, // Fix: Added Status.PENDING
+      [Status.PENDING]: 0,
       [Status.PENDING_JM]: 0,
       [Status.PENDING_TL]: 0,
       [Status.PENDING_CED]: 0,
@@ -38,8 +41,18 @@ export const useManuscriptList = (manuscripts: Manuscript[], activeFilter: Statu
     };
 
     manuscripts.forEach(m => {
+      // Individual status counts
       if (counts[m.status] !== undefined) {
         counts[m.status]++;
+      }
+      
+      // Group counts
+      if ([Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
+        counts.PENDING_GROUP++;
+      }
+      
+      if (m.status === Status.WORKED || m.status === Status.PENDING || m.status === Status.PENDING_JM) {
+        counts.HANDOVER++;
       }
     });
 
@@ -52,6 +65,6 @@ export const useManuscriptList = (manuscripts: Manuscript[], activeFilter: Statu
     filterStatus,
     setFilterStatus,
     filteredManuscripts,
-    statusCounts
+    statusCounts: counts
   };
 };

@@ -232,6 +232,7 @@ export const dataService = {
       if (updates.dateQueried !== undefined) dbUpdates.date_queried = updates.dateQueried;
       if (updates.dateEmailed !== undefined) dbUpdates.date_emailed = updates.dateEmailed;
       if (updates.pendingFlags !== undefined) dbUpdates.pending_flags = updates.pendingFlags;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       
       const { error } = await supabase
         .from('manuscripts')

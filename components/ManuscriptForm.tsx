@@ -176,9 +176,17 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
         [Status.UNTOUCHED]: 'Reset to Untouched'
       };
       
+      let noteContent = `Status updated to: ${statusLabels[formData.status!] || formData.status}`;
+      
+      // Auto-remark for JM Query resolution
+      const wasQueried = initialData?.status === Status.PENDING_JM || (initialData?.status === Status.PENDING && initialData?.pendingFlags?.jm);
+      if (wasQueried && formData.status === Status.WORKED) {
+        noteContent = "Resolved from JM Query - Marked as Worked";
+      }
+
       const autoNote: Note = {
         id: crypto.randomUUID(),
-        content: `Status updated to: ${statusLabels[formData.status!] || formData.status}`,
+        content: noteContent,
         timestamp: Date.now()
       };
       finalNotes = [autoNote, ...finalNotes];
@@ -247,7 +255,7 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
                   <button 
                     type="button"
                     onClick={handleCopy}
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${copied ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${copied ? 'text-emerald-500 bg-emerald-50' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}
                     title="Copy Manuscript ID"
                   >
                     {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
