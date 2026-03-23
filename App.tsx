@@ -15,6 +15,7 @@ import { BillingCycleModal } from './components/BillingCycleModal';
 import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useAppData } from './hooks/useAppData';
+import { dataService } from './services/dataService';
 import { ACHIEVEMENTS } from './services/gamification';
 import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, History, Mail, Upload, Trophy, User } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
@@ -53,8 +54,16 @@ const App: React.FC = () => {
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; message: string; type: ToastType }[]>([]);
 
+  const generateId = () => {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    }
+  };
+
   const showToast = (message: string, type: ToastType = 'success') => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
   };
 
@@ -359,10 +368,17 @@ const App: React.FC = () => {
   };
 
   const executeBulkUpdate = async (ids: string[], updates: Partial<Manuscript>) => {
+    if (ids.length === 0) return;
+    
     const now = new Date().toISOString();
+    
+    // 1. Calculate all updates locally first
     const updatedManuscripts = manuscripts.map(m => {
       if (!ids.includes(m.id)) return m;
+      
       const itemUpdates: any = { ...updates, dateUpdated: now };
+      
+      // Handle status change logic
       if (updates.status && updates.status !== m.status) {
         itemUpdates.dateStatusChanged = updates.dateStatusChanged || now;
         if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
@@ -373,6 +389,7 @@ const App: React.FC = () => {
           itemUpdates.billedDate = updates.completedDate || itemUpdates.completedDate || m.completedDate || now;
         }
         
+        // Auto-remark generation
         if (!updates.notes) {
           const statusLabels: Record<Status, string> = {
             [Status.WORKED]: 'Completed / Worked',
@@ -393,7 +410,7 @@ const App: React.FC = () => {
           }
 
           const autoNote = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             content: noteContent,
             timestamp: Date.now()
           };
@@ -404,28 +421,23 @@ const App: React.FC = () => {
       return { ...m, ...itemUpdates };
     });
 
+    // 2. Update local state once
     setManuscripts(updatedManuscripts);
     
+    // 3. Sync with database
     try { 
+      // We process each update sequentially to ensure reliability
       for (const id of ids) {
-        const m = updatedManuscripts.find(item => item.id === id);
-        const originalM = manuscripts.find(item => item.id === id);
-        if (m && originalM) {
-          const finalUpdates = { ...updates };
-          if (updates.status && updates.status !== originalM.status) {
-            (finalUpdates as any).dateStatusChanged = updates.dateStatusChanged || now;
-            if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
-              (finalUpdates as any).completedDate = updates.completedDate || now;
-            }
-            if (!updates.notes) {
-              (finalUpdates as any).notes = m.notes;
-            }
-          }
-          await updateManuscripts([id], finalUpdates);
+        const updatedItem = updatedManuscripts.find(item => item.id === id);
+        if (updatedItem) {
+          // Using updateManuscript (singular) is more reliable as it sends the full object state
+          // including generated notes and dates.
+          await dataService.updateManuscript(updatedItem, isOffline);
         }
       }
     } catch (error) {
-      console.error("Bulk update error:", error);
+      console.error("Bulk update sync error:", error);
+      showToast("Sync error. Some changes might not have saved to cloud.", "warning");
     }
   };
 
