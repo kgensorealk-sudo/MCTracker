@@ -201,9 +201,9 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       priority: formData.priority || 'Normal',
       dateReceived: formData.dateReceived || new Date().toISOString(),
       dueDate: formData.dueDate,
-      completedDate: formData.status === Status.WORKED ? formData.completedDate : undefined,
+      completedDate: formData.status === Status.WORKED ? (formData.completedDate || new Date().toISOString()) : undefined,
       dateUpdated: new Date().toISOString(),
-      dateStatusChanged: formData.dateStatusChanged || new Date().toISOString(),
+      dateStatusChanged: statusChanged ? new Date().toISOString() : (formData.dateStatusChanged || new Date().toISOString()),
       notes: finalNotes,
     };
     

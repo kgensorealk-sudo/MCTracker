@@ -364,9 +364,9 @@ const App: React.FC = () => {
       if (!ids.includes(m.id)) return m;
       const itemUpdates: any = { ...updates, dateUpdated: now };
       if (updates.status && updates.status !== m.status) {
-        itemUpdates.dateStatusChanged = now;
+        itemUpdates.dateStatusChanged = updates.dateStatusChanged || now;
         if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
-          itemUpdates.completedDate = now;
+          itemUpdates.completedDate = updates.completedDate || now;
         }
         
         if (updates.status === Status.BILLED && !updates.billedDate && !m.billedDate) {
@@ -409,12 +409,13 @@ const App: React.FC = () => {
     try { 
       for (const id of ids) {
         const m = updatedManuscripts.find(item => item.id === id);
-        if (m) {
+        const originalM = manuscripts.find(item => item.id === id);
+        if (m && originalM) {
           const finalUpdates = { ...updates };
-          if (updates.status && updates.status !== m.status) {
-            (finalUpdates as any).dateStatusChanged = now;
+          if (updates.status && updates.status !== originalM.status) {
+            (finalUpdates as any).dateStatusChanged = updates.dateStatusChanged || now;
             if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
-              (finalUpdates as any).completedDate = now;
+              (finalUpdates as any).completedDate = updates.completedDate || now;
             }
             if (!updates.notes) {
               (finalUpdates as any).notes = m.notes;

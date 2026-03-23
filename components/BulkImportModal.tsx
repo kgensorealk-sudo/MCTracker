@@ -113,7 +113,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onImport, onClose, ex
       const dateReceived = parseDate(dateSentStr) || new Date().toISOString();
       const dueDate = parseDate(dueDateStr) || undefined;
       const dateReturned = parseDate(dateReturnedStr);
-      const dateStatusChanged = dateReturned || new Date().toISOString();
+      const dateStatusChanged = status === Status.WORKED ? (dateReturned || new Date().toISOString()) : dateReceived;
       
       const manuscript: Manuscript = {
         id: crypto.randomUUID(),
