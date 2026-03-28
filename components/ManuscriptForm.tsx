@@ -204,6 +204,9 @@ const ManuscriptForm: React.FC<ManuscriptFormProps> = ({ initialData, onSave, on
       completedDate: formData.status === Status.WORKED ? (formData.completedDate || new Date().toISOString()) : undefined,
       dateUpdated: new Date().toISOString(),
       dateStatusChanged: statusChanged ? new Date().toISOString() : (formData.dateStatusChanged || new Date().toISOString()),
+      dateQueried: [Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(formData.status!) 
+        ? (statusChanged ? new Date().toISOString() : (formData.dateQueried || initialData?.dateQueried))
+        : (formData.dateQueried || initialData?.dateQueried),
       notes: finalNotes,
     };
     

@@ -381,6 +381,12 @@ const App: React.FC = () => {
       // Handle status change logic
       if (updates.status && updates.status !== m.status) {
         itemUpdates.dateStatusChanged = updates.dateStatusChanged || now;
+        
+        // Persist the date a query was raised
+        if ([Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(updates.status)) {
+          itemUpdates.dateQueried = now;
+        }
+
         if ((updates.status === Status.WORKED || updates.status === Status.BILLED) && !m.completedDate) {
           itemUpdates.completedDate = updates.completedDate || now;
         }

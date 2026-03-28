@@ -59,17 +59,25 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
         }
 
         // 2. Query Counts Grouped by Day
-        // Check dateQueried first (persistent), then status change if pending
-        let queryKey: string | null = null;
-        
+        // Check dateQueried first (persistent), then status change if pending or resolved
         if (m.dateQueried) {
-            queryKey = getLocalDateKey(m.dateQueried);
+            const queryKey = getLocalDateKey(m.dateQueried);
+            if (queryKey) {
+                queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
+            }
+            
+            // Also count resolution as a "process" action if it happened on a different day or we want to track both
+            if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged) {
+                const resolutionKey = getLocalDateKey(m.dateStatusChanged);
+                if (resolutionKey && resolutionKey !== queryKey) {
+                    queryCounts[resolutionKey] = (queryCounts[resolutionKey] || 0) + 1;
+                }
+            }
         } else if ([Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
-            queryKey = getLocalDateKey(m.dateStatusChanged || m.dateUpdated);
-        }
-
-        if (queryKey) {
-            queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
+            const queryKey = getLocalDateKey(m.dateStatusChanged || m.dateUpdated);
+            if (queryKey) {
+                queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
+            }
         }
     });
 
@@ -110,11 +118,13 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     progress: (mss) => mss.filter(m => {
         if (m.dateQueried && isToday(m.dateQueried)) return true;
         if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
+        if (m.dateQueried && (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.dateStatusChanged)) return true;
         return false;
     }).length,
     isCompleted: (mss) => mss.filter(m => {
         if (m.dateQueried && isToday(m.dateQueried)) return true;
         if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
+        if (m.dateQueried && (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.dateStatusChanged)) return true;
         return false;
     }).length >= 2
   },
