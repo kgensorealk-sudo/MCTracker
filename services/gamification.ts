@@ -59,25 +59,11 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
         }
 
         // 2. Query Counts Grouped by Day
-        // Check dateQueried first (persistent), then status change if pending or resolved
-        if (m.dateQueried) {
-            const queryKey = getLocalDateKey(m.dateQueried);
-            if (queryKey) {
-                queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
-            }
-            
-            // Also count resolution as a "process" action if it happened on a different day or we want to track both
-            if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged) {
-                const resolutionKey = getLocalDateKey(m.dateStatusChanged);
-                if (resolutionKey && resolutionKey !== queryKey) {
-                    queryCounts[resolutionKey] = (queryCounts[resolutionKey] || 0) + 1;
-                }
-            }
-        } else if ([Status.PENDING, Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status)) {
-            const queryKey = getLocalDateKey(m.dateStatusChanged || m.dateUpdated);
-            if (queryKey) {
-                queryCounts[queryKey] = (queryCounts[queryKey] || 0) + 1;
-            }
+        // Action: Resolve Query (Move from Pending to Worked/Billed)
+        // We only count it if it was actually a query (had dateQueried)
+        if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged && m.dateQueried) {
+            const key = getLocalDateKey(m.dateStatusChanged);
+            if (key) queryCounts[key] = (queryCounts[key] || 0) + 1;
         }
     });
 
@@ -112,21 +98,26 @@ export const ALL_DAILY_QUESTS: Quest[] = [
   {
     id: 'query_crusher',
     title: 'Query Crusher',
-    description: 'Process 2 Pending items (JM/TL/CED) today.',
+    description: 'Resolve 2 Pending items (JM/TL/CED) today.',
     target: 2,
     rewardXP: 150,
-    progress: (mss) => mss.filter(m => {
-        if (m.dateQueried && isToday(m.dateQueried)) return true;
-        if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
-        if (m.dateQueried && (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.dateStatusChanged)) return true;
-        return false;
-    }).length,
-    isCompleted: (mss) => mss.filter(m => {
-        if (m.dateQueried && isToday(m.dateQueried)) return true;
-        if ([Status.PENDING_JM, Status.PENDING_TL, Status.PENDING_CED].includes(m.status) && isToday(m.dateStatusChanged)) return true;
-        if (m.dateQueried && (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.dateStatusChanged)) return true;
-        return false;
-    }).length >= 2
+    progress: (mss) => {
+        return mss.filter(m => 
+            (m.status === Status.WORKED || m.status === Status.BILLED) && 
+            m.dateStatusChanged && 
+            isToday(m.dateStatusChanged) && 
+            m.dateQueried
+        ).length;
+    },
+    isCompleted: (mss) => {
+        const count = mss.filter(m => 
+            (m.status === Status.WORKED || m.status === Status.BILLED) && 
+            m.dateStatusChanged && 
+            isToday(m.dateStatusChanged) && 
+            m.dateQueried
+        ).length;
+        return count >= 2;
+    }
   },
   {
     id: 'power_hour',
