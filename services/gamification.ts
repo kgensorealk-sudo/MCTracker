@@ -29,8 +29,8 @@ const getLocalDateKey = (dateString?: string) => {
 const getMaxDailyCount = (mss: Manuscript[]) => {
     const counts: Record<string, number> = {};
     mss.forEach(m => {
-        if (m.status === Status.WORKED || m.status === Status.BILLED) {
-            const rawDate = m.completedDate || m.dateStatusChanged;
+        if (m.status === Status.WORKED) {
+            const rawDate = m.completedDate;
             const key = getLocalDateKey(rawDate);
             if (key) counts[key] = (counts[key] || 0) + 1;
         }
@@ -49,9 +49,9 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
     const queryCounts: Record<string, number> = {};
 
     mss.forEach(m => {
-        // 1. Worked Counts Grouped by Day
-        if (m.status === Status.WORKED || m.status === Status.BILLED) {
-             const rawDate = m.completedDate || m.dateStatusChanged;
+        // 1. Worked Counts Grouped by Day (Only count WORKED status for daily progress)
+        if (m.status === Status.WORKED) {
+             const rawDate = m.completedDate;
              const key = getLocalDateKey(rawDate);
              if (key) {
                  workedCounts[key] = (workedCounts[key] || 0) + 1;
@@ -59,9 +59,9 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
         }
 
         // 2. Query Counts Grouped by Day
-        // Action: Resolve Query (Move from Pending to Worked/Billed)
-        // We only count it if it was actually a query (had dateQueried)
-        if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged && m.dateQueried) {
+        // Action: Resolve Query (Move from Pending to Worked)
+        // We only count it if it was actually a query (had dateQueried) and moved to WORKED
+        if (m.status === Status.WORKED && m.dateStatusChanged && m.dateQueried) {
             const key = getLocalDateKey(m.dateStatusChanged);
             if (key) queryCounts[key] = (queryCounts[key] || 0) + 1;
         }
@@ -92,8 +92,8 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Complete 5 manuscripts today.',
     target: 5,
     rewardXP: 100,
-    progress: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate || m.dateStatusChanged)).length,
-    isCompleted: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate || m.dateStatusChanged)).length >= 5
+    progress: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length,
+    isCompleted: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length >= 5
   },
   {
     id: 'query_crusher',
@@ -103,7 +103,7 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     rewardXP: 150,
     progress: (mss) => {
         return mss.filter(m => 
-            (m.status === Status.WORKED || m.status === Status.BILLED) && 
+            m.status === Status.WORKED && 
             m.dateStatusChanged && 
             isToday(m.dateStatusChanged) && 
             m.dateQueried
@@ -111,7 +111,7 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     },
     isCompleted: (mss) => {
         const count = mss.filter(m => 
-            (m.status === Status.WORKED || m.status === Status.BILLED) && 
+            m.status === Status.WORKED && 
             m.dateStatusChanged && 
             isToday(m.dateStatusChanged) && 
             m.dateQueried
@@ -125,8 +125,8 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Complete 15 manuscripts today.',
     target: 15,
     rewardXP: 300,
-    progress: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate || m.dateStatusChanged)).length,
-    isCompleted: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate || m.dateStatusChanged)).length >= 15
+    progress: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length,
+    isCompleted: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length >= 15
   },
   {
     id: 'note_taker',
@@ -134,8 +134,20 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Add notes to 3 different files today.',
     target: 3,
     rewardXP: 100,
-    progress: (mss) => mss.filter(m => m.notes.some(n => isToday(new Date(n.timestamp).toISOString()))).length,
-    isCompleted: (mss) => mss.filter(m => m.notes.some(n => isToday(new Date(n.timestamp).toISOString()))).length >= 3
+    progress: (mss) => mss.filter(m => 
+        m.notes.some(n => 
+            isToday(new Date(n.timestamp).toISOString()) && 
+            !n.content.startsWith('Status updated to:') &&
+            !n.content.startsWith('Resolved from JM Query')
+        )
+    ).length,
+    isCompleted: (mss) => mss.filter(m => 
+        m.notes.some(n => 
+            isToday(new Date(n.timestamp).toISOString()) && 
+            !n.content.startsWith('Status updated to:') &&
+            !n.content.startsWith('Resolved from JM Query')
+        )
+    ).length >= 3
   },
   {
     id: 'cleanup_crew',
@@ -143,8 +155,16 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Clear 5 Untouched files today.',
     target: 5,
     rewardXP: 100,
-    progress: (mss) => mss.filter(m => m.status !== Status.UNTOUCHED && isToday(m.dateStatusChanged || m.dateUpdated)).length,
-    isCompleted: (mss) => mss.filter(m => m.status !== Status.UNTOUCHED && isToday(m.dateStatusChanged || m.dateUpdated)).length >= 5
+    progress: (mss) => mss.filter(m => 
+        m.status !== Status.UNTOUCHED && 
+        m.status !== Status.BILLED && 
+        isToday(m.dateStatusChanged)
+    ).length,
+    isCompleted: (mss) => mss.filter(m => 
+        m.status !== Status.UNTOUCHED && 
+        m.status !== Status.BILLED && 
+        isToday(m.dateStatusChanged)
+    ).length >= 5
   },
   {
     id: 'journal_explorer_daily',
@@ -153,11 +173,11 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     target: 3,
     rewardXP: 150,
     progress: (mss) => {
-        const todayMss = mss.filter(m => isToday(m.dateStatusChanged || m.dateUpdated));
+        const todayMss = mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate));
         return new Set(todayMss.map(m => m.journalCode)).size;
     },
     isCompleted: (mss) => {
-        const todayMss = mss.filter(m => isToday(m.dateStatusChanged || m.dateUpdated));
+        const todayMss = mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate));
         return new Set(todayMss.map(m => m.journalCode)).size >= 3;
     }
   }
