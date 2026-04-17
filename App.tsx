@@ -17,7 +17,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useAppData } from './hooks/useAppData';
 import { dataService } from './services/dataService';
 import { ACHIEVEMENTS } from './services/gamification';
-import { LayoutDashboard, List, Plus, ShieldCheck, LogOut, Loader2, History, Mail, Upload, Trophy, User } from 'lucide-react';
+import { LayoutDashboard, List, Plus, LogOut, Loader2, History, Mail, Upload, Trophy, User } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { ToastContainer, ToastType } from './components/Toast';
 
@@ -546,13 +546,14 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-4">
           {/* Logo & Progress */}
           <div className="flex items-center gap-4 sm:gap-8">
-            <div className="flex items-center gap-2.5 group cursor-pointer" onClick={() => setView('dashboard')}>
-              <div className={`bg-slate-900 rounded-xl shadow-lg shadow-slate-200 group-hover:scale-110 transition-all duration-300 ${scrolled ? 'p-1.5' : 'p-2.5'}`}>
-                <ShieldCheck className={`${scrolled ? 'w-4 h-4' : 'w-6 h-6'} text-white transition-all duration-300`} />
-              </div>
-              <div className="hidden md:block">
-                <h1 className={`font-black tracking-tight text-slate-900 leading-none transition-all duration-300 ${scrolled ? 'text-sm' : 'text-lg'}`}>MasterCopy</h1>
-                {!scrolled && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1 animate-fade-in">Analyst Hub</p>}
+            <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setView('dashboard')}>
+              <div className={`transition-all duration-300 ${scrolled ? 'w-10 h-10' : 'w-16 h-16'} rounded-full border-2 border-indigo-50 bg-white overflow-hidden shadow-sm flex items-center justify-center p-0.5`}>
+                <img 
+                  src="/Logo.png" 
+                  alt="MasterCopy Analyst Hub" 
+                  className="w-full h-full object-cover rounded-full"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </div>
 

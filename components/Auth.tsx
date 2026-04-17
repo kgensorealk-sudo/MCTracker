@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { ShieldCheck, Loader2, Mail, Lock, ArrowRight, User } from 'lucide-react';
+import { Loader2, Mail, Lock, ArrowRight, User } from 'lucide-react';
 
 export const Auth: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -63,13 +63,15 @@ export const Auth: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-            <ShieldCheck className="w-10 h-10 text-white" />
+          <div className="w-40 h-40 rounded-full border-4 border-indigo-50 bg-white overflow-hidden shadow-xl flex items-center justify-center p-1">
+            <img 
+              src="/Logo.png" 
+              alt="MasterCopy Analyst Hub" 
+              className="w-full h-full object-cover rounded-full"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900">
-          MasterCopy Tracker
-        </h2>
         <p className="mt-2 text-center text-sm text-slate-600">
           {isSignUp ? 'Create your private workspace' : 'Sign in to your workspace'}
         </p>

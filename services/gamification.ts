@@ -49,8 +49,8 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
     const queryCounts: Record<string, number> = {};
 
     mss.forEach(m => {
-        // 1. Worked Counts Grouped by Day (Only count WORKED status for daily progress)
-        if (m.status === Status.WORKED) {
+        // 1. Worked Counts Grouped by Day (Include WORKED or BILLED status)
+        if (m.status === Status.WORKED || m.status === Status.BILLED) {
              const rawDate = m.completedDate;
              const key = getLocalDateKey(rawDate);
              if (key) {
@@ -58,10 +58,10 @@ const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
              }
         }
 
-        // 2. Query Counts Grouped by Day
-        // Action: Resolve Query (Move from Pending to Worked)
-        // We only count it if it was actually a query (had dateQueried) and moved to WORKED
-        if (m.status === Status.WORKED && m.dateStatusChanged && m.dateQueried) {
+        // 2. Query Counts Grouped by Day (Include WORKED or BILLED status)
+        // Action: Resolve Query (Move from Pending to Worked/Billed)
+        // We only count it if it was actually a query (had dateQueried) and moved to a completed state
+        if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged && m.dateQueried) {
             const key = getLocalDateKey(m.dateStatusChanged);
             if (key) queryCounts[key] = (queryCounts[key] || 0) + 1;
         }
@@ -92,8 +92,8 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Complete 5 manuscripts today.',
     target: 5,
     rewardXP: 100,
-    progress: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length,
-    isCompleted: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length >= 5
+    progress: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate)).length,
+    isCompleted: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate)).length >= 5
   },
   {
     id: 'query_crusher',
@@ -103,7 +103,7 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     rewardXP: 150,
     progress: (mss) => {
         return mss.filter(m => 
-            m.status === Status.WORKED && 
+            (m.status === Status.WORKED || m.status === Status.BILLED) && 
             m.dateStatusChanged && 
             isToday(m.dateStatusChanged) && 
             m.dateQueried
@@ -111,7 +111,7 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     },
     isCompleted: (mss) => {
         const count = mss.filter(m => 
-            m.status === Status.WORKED && 
+            (m.status === Status.WORKED || m.status === Status.BILLED) && 
             m.dateStatusChanged && 
             isToday(m.dateStatusChanged) && 
             m.dateQueried
@@ -125,8 +125,8 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     description: 'Complete 15 manuscripts today.',
     target: 15,
     rewardXP: 300,
-    progress: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length,
-    isCompleted: (mss) => mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate)).length >= 15
+    progress: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate)).length,
+    isCompleted: (mss) => mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate)).length >= 15
   },
   {
     id: 'note_taker',
@@ -157,12 +157,10 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     rewardXP: 100,
     progress: (mss) => mss.filter(m => 
         m.status !== Status.UNTOUCHED && 
-        m.status !== Status.BILLED && 
         isToday(m.dateStatusChanged)
     ).length,
     isCompleted: (mss) => mss.filter(m => 
         m.status !== Status.UNTOUCHED && 
-        m.status !== Status.BILLED && 
         isToday(m.dateStatusChanged)
     ).length >= 5
   },
@@ -173,11 +171,11 @@ export const ALL_DAILY_QUESTS: Quest[] = [
     target: 3,
     rewardXP: 150,
     progress: (mss) => {
-        const todayMss = mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate));
+        const todayMss = mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate));
         return new Set(todayMss.map(m => m.journalCode)).size;
     },
     isCompleted: (mss) => {
-        const todayMss = mss.filter(m => m.status === Status.WORKED && isToday(m.completedDate));
+        const todayMss = mss.filter(m => (m.status === Status.WORKED || m.status === Status.BILLED) && isToday(m.completedDate));
         return new Set(todayMss.map(m => m.journalCode)).size >= 3;
     }
   }
@@ -847,14 +845,65 @@ export const ACHIEVEMENTS: Achievement[] = [
 
 // --- Leveling System ---
 const TITLES = [
-  { xp: 0, title: "Novice Analyst" },
-  { xp: 500, title: "Content Specialist" },
-  { xp: 1500, title: "Senior Analyst" },
-  { xp: 3500, title: "Workflow Expert" },
-  { xp: 6000, title: "Master of Copy" },
-  { xp: 10000, title: "Legendary Curator" },
-  { xp: 20000, title: "Grandmaster" },
-  { xp: 50000, title: "The Oracle" }
+  // --- WORLD RANKS (1-10) ---
+  { xp: 0, title: "Locality Scout" },
+  { xp: 500, title: "Continental Scholar" },
+  { xp: 1500, title: "Global Specialist" },
+  { xp: 3500, title: "Earthly Architect" },
+  { xp: 7000, title: "World Weaver" },
+  { xp: 12000, title: "Planetary Warden" },
+  { xp: 18000, title: "Sovereign of Terra" },
+  { xp: 26000, title: "Grandmaster" },
+  { xp: 35000, title: "The Sentinel" },
+  { xp: 45000, title: "World Soul" },
+
+  // --- SOLAR SYSTEM RANKS (11-20) ---
+  { xp: 60000, title: "Lunar Pioneer" },
+  { xp: 80000, title: "Martian Strategist" },
+  { xp: 105000, title: "Jovian Giant" },
+  { xp: 135000, title: "Saturnian Keeper" },
+  { xp: 170000, title: "Solar Flare" },
+  { xp: 210000, title: "Celestial Pilot" },
+  { xp: 260000, title: "Helios Disciple" },
+  { xp: 320000, title: "Planetary Architect" },
+  { xp: 390000, title: "Solar Guardian" },
+  { xp: 470000, title: "System Overlord" },
+
+  // --- GALAXY RANKS (21-30) ---
+  { xp: 570000, title: "Nebula Walker" },
+  { xp: 680000, title: "Star-Streamer" },
+  { xp: 810000, title: "Nova Specialist" },
+  { xp: 960000, title: "Supernova Core" },
+  { xp: 1150000, title: "Galactic Warden" },
+  { xp: 1400000, title: "Andromeda Scribe" },
+  { xp: 1700000, title: "Event Horizon" },
+  { xp: 2100000, title: "Quasar Master" },
+  { xp: 2600000, title: "Milky Way Monarch" },
+  { xp: 3200000, title: "Galactic Emperor" },
+
+  // --- UNIVERSE RANKS (31-40) ---
+  { xp: 4000000, title: "Void Seeker" },
+  { xp: 5000000, title: "Spacetime Weaver" },
+  { xp: 6200000, title: "Cosmic Entity" },
+  { xp: 7600000, title: "Infinite Analyst" },
+  { xp: 9200000, title: "Universal Pillar" },
+  { xp: 11000000, title: "Reality Architect" },
+  { xp: 13000000, title: "Dimensional Lord" },
+  { xp: 15500000, title: "Multiverse Warden" },
+  { xp: 18500000, title: "Entropy Master" },
+  { xp: 22000000, title: "Universal Alpha" },
+
+  // --- GODLY RANKS (41-50) ---
+  { xp: 27000000, title: "Ascended Spirit" },
+  { xp: 33000000, title: "Divine Scribe" },
+  { xp: 40000000, title: "Mythic Architect" },
+  { xp: 48000000, title: "Aetheric Eternal" },
+  { xp: 58000000, title: "Olympian Sage" },
+  { xp: 70000000, title: "Primordial Wisdom" },
+  { xp: 85000000, title: "Cosmic Divinity" },
+  { xp: 105000000, title: "Infinite Origin" },
+  { xp: 130000000, title: "The All-Seeing" },
+  { xp: 175000000, title: "Manifest Absolute" }
 ];
 
 export const calculateXP = (manuscripts: Manuscript[], target: number): number => {
