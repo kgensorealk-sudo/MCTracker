@@ -29,13 +29,14 @@ const getLocalDateKey = (dateString?: string) => {
 const getMaxDailyCount = (mss: Manuscript[]) => {
     const counts: Record<string, number> = {};
     mss.forEach(m => {
-        if (m.status === Status.WORKED) {
-            const rawDate = m.completedDate;
+        if (m.status === Status.WORKED || m.status === Status.BILLED) {
+            const rawDate = m.completedDate || m.dateStatusChanged || m.dateUpdated;
             const key = getLocalDateKey(rawDate);
             if (key) counts[key] = (counts[key] || 0) + 1;
         }
     });
-    return Math.max(0, ...Object.values(counts));
+    const values = Object.values(counts);
+    return values.length > 0 ? Math.max(...values) : 0;
 };
 
 const getUniqueJournals = (mss: Manuscript[]) => {
@@ -47,37 +48,74 @@ const getUniqueJournals = (mss: Manuscript[]) => {
 const calculateHistoricalDailyXP = (mss: Manuscript[]) => {
     const workedCounts: Record<string, number> = {};
     const queryCounts: Record<string, number> = {};
+    const journalCounts: Record<string, Set<string>> = {};
+    const noteCounts: Record<string, Set<string>> = {};
+    const cleanupCounts: Record<string, number> = {};
 
     mss.forEach(m => {
-        // 1. Worked Counts Grouped by Day (Include WORKED or BILLED status)
+        // 1. Worked Counts (Daily Grind, High Volume)
         if (m.status === Status.WORKED || m.status === Status.BILLED) {
-             const rawDate = m.completedDate;
-             const key = getLocalDateKey(rawDate);
+             const key = getLocalDateKey(m.completedDate || m.dateStatusChanged || m.dateUpdated);
              if (key) {
                  workedCounts[key] = (workedCounts[key] || 0) + 1;
+                 
+                 // Journal Explorer tracking
+                 if (m.journalCode) {
+                     if (!journalCounts[key]) journalCounts[key] = new Set();
+                     journalCounts[key].add(m.journalCode);
+                 }
              }
         }
 
-        // 2. Query Counts Grouped by Day (Include WORKED or BILLED status)
-        // Action: Resolve Query (Move from Pending to Worked/Billed)
-        // We only count it if it was actually a query (had dateQueried) and moved to a completed state
+        // 2. Query Resolutions (Query Crusher)
         if ((m.status === Status.WORKED || m.status === Status.BILLED) && m.dateStatusChanged && m.dateQueried) {
             const key = getLocalDateKey(m.dateStatusChanged);
             if (key) queryCounts[key] = (queryCounts[key] || 0) + 1;
         }
+
+        // 3. Cleanup (Cleanup Crew)
+        if (m.status !== Status.UNTOUCHED && m.dateStatusChanged) {
+            const key = getLocalDateKey(m.dateStatusChanged);
+            if (key) cleanupCounts[key] = (cleanupCounts[key] || 0) + 1;
+        }
+
+        // 4. Notes (Note Taker)
+        if (m.notes && m.notes.length > 0) {
+            m.notes.forEach(n => {
+                const isAuto = n.content.startsWith('Status updated to:') || n.content.startsWith('Resolved from JM Query');
+                if (!isAuto) {
+                    const key = getLocalDateKey(new Date(n.timestamp).toISOString());
+                    if (key) {
+                        if (!noteCounts[key]) noteCounts[key] = new Set();
+                        noteCounts[key].add(m.id); // Set of file IDs to count unique files per day
+                    }
+                }
+            });
+        }
     });
 
     let xp = 0;
+    const allKeys = new Set([
+        ...Object.keys(workedCounts), 
+        ...Object.keys(queryCounts), 
+        ...Object.keys(journalCounts),
+        ...Object.keys(noteCounts),
+        ...Object.keys(cleanupCounts)
+    ]);
 
-    // Sum Worked XP for every eligible day in history
-    Object.values(workedCounts).forEach(count => {
-        if (count >= 5) xp += 100; // Reward for 'Daily Grind'
-        if (count >= 15) xp += 300; // Reward for 'High Volume' (Stacks)
-    });
-
-    // Sum Query XP for every eligible day in history
-    Object.values(queryCounts).forEach(count => {
-        if (count >= 2) xp += 150; // Reward for 'Query Crusher'
+    allKeys.forEach(key => {
+        // Daily Grind (5 files)
+        if ((workedCounts[key] || 0) >= 5) xp += 100;
+        // High Volume (15 files)
+        if ((workedCounts[key] || 0) >= 15) xp += 300;
+        // Query Crusher (2 resolutions)
+        if ((queryCounts[key] || 0) >= 2) xp += 150;
+        // Journal Explorer (3 unique journals)
+        if (journalCounts[key] && journalCounts[key].size >= 3) xp += 150;
+        // Note Taker (3 files with notes)
+        if (noteCounts[key] && noteCounts[key].size >= 3) xp += 100;
+        // Cleanup Crew (5 untouched cleared)
+        if ((cleanupCounts[key] || 0) >= 5) xp += 100;
     });
 
     return xp;

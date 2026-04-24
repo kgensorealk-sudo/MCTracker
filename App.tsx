@@ -16,7 +16,7 @@ import { Auth } from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useAppData } from './hooks/useAppData';
 import { dataService } from './services/dataService';
-import { ACHIEVEMENTS } from './services/gamification';
+import { ACHIEVEMENTS, calculateXP, calculateLevel } from './services/gamification';
 import { LayoutDashboard, List, Plus, LogOut, Loader2, History, Mail, Upload, Trophy, User } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { ToastContainer, ToastType } from './components/Toast';
@@ -153,6 +153,11 @@ const App: React.FC = () => {
     localStorage.setItem('mc_tracker_seen_achievements', JSON.stringify(unlockedIds));
     setHasNewAchievements(false);
   };
+
+  const levelData = useMemo(() => {
+    const xp = calculateXP(manuscripts, targetPerCycle);
+    return calculateLevel(xp);
+  }, [manuscripts, targetPerCycle]);
 
   // Cycle Progress for Header
   const cycleProgress = useMemo(() => {
@@ -644,7 +649,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3 pl-1">
               <div className="hidden sm:flex flex-col items-end">
                 <span className="text-xs font-black text-slate-900 leading-none">{userName}</span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Level {Math.floor(manuscripts.length / 50) + 1}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">{levelData.title}</span>
               </div>
               <button 
                 onClick={handleSignOut}
