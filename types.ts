@@ -51,6 +51,8 @@ export interface UserSchedule {
   daysOff: string[]; // ISO date strings (YYYY-MM-DD) of planned days off
   weeklyWeights: number[]; 
   cycleRates?: Record<string, { usd: number; php: number }>;
+  legacyXP?: number; // XP from deleted files
+  legacyAchievementXP?: number; // XP from achievements that were lost after deletion
 }
 
 // --- Gamification ---

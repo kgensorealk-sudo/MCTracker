@@ -1,6 +1,6 @@
 
 import { useState, useCallback } from 'react';
-import { Manuscript, UserSchedule } from '../types';
+import { Manuscript, UserSchedule, Status } from '../types';
 import { dataService } from '../services/dataService';
 
 export const useAppData = (isOffline: boolean) => {
@@ -49,6 +49,21 @@ export const useAppData = (isOffline: boolean) => {
   };
 
   const deleteManuscript = async (id: string) => {
+    // 1. Calculate XP loss if any
+    const m = manuscripts.find(item => item.id === id);
+    if (m && (m.status === Status.WORKED || m.status === Status.BILLED)) {
+      const XP_PER_FILE = 25; // Matching gamification constant
+      const currentLegacy = userSchedule.legacyXP || 0;
+      const updatedSchedule = { 
+        ...userSchedule, 
+        legacyXP: currentLegacy + XP_PER_FILE 
+      };
+      
+      // Update local state and remote settings
+      setUserSchedule(updatedSchedule);
+      await dataService.updateSchedule(updatedSchedule, isOffline);
+    }
+
     await dataService.deleteManuscript(id, isOffline);
     setManuscripts(prev => prev.filter(m => m.id !== id));
   };

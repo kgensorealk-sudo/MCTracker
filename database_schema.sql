@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
 -- MIGRATION: Safely add new columns for Smart Pacing
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS weekly_weights JSONB DEFAULT '[1, 1, 1, 1, 1, 1, 1]';
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exclude_weekends BOOLEAN DEFAULT false;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS legacy_xp INTEGER DEFAULT 0;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS legacy_achievement_xp INTEGER DEFAULT 0;
 
 -- Security Policies
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;

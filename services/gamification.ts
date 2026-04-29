@@ -1,8 +1,8 @@
 import { Achievement, Manuscript, Status, Quest, UserLevel } from '../types';
 
 // --- Constants ---
-const XP_PER_FILE = 25;
-const XP_PER_ACHIEVEMENT_TIER = {
+export const XP_PER_FILE = 25;
+export const XP_PER_ACHIEVEMENT_TIER = {
   BRONZE: 150,
   SILVER: 300,
   GOLD: 600,
@@ -944,8 +944,8 @@ const TITLES = [
   { xp: 175000000, title: "Manifest Absolute" }
 ];
 
-export const calculateXP = (manuscripts: Manuscript[], target: number): number => {
-    let xp = 0;
+export const calculateXP = (manuscripts: Manuscript[], target: number, legacyXP: number = 0, legacyAchXP: number = 0): number => {
+    let xp = legacyXP + legacyAchXP;
     
     // 1. XP for Work
     const workedCount = manuscripts.filter(m => m.status === Status.WORKED || m.status === Status.BILLED).length;

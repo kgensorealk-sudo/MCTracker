@@ -38,9 +38,16 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   const [listSearch, setListSearch] = useState('');
   const [confirmClaim, setConfirmClaim] = useState<{ id: string; label: string; date: string } | null>(null);
   
+  const [ratesConfirmed, setRatesConfirmed] = useState(false);
+  
   const currentRates = useMemo(() => 
     cycleRates[selectedCycleId] || DEFAULT_RATES, 
   [cycleRates, selectedCycleId]);
+
+  // Reset confirmation when cycle changes
+  React.useEffect(() => {
+    setRatesConfirmed(false);
+  }, [selectedCycleId]);
 
   const selectedCycleData = useMemo(() => 
     sortedCycles.find(c => c.info.id === selectedCycleId), 
@@ -162,6 +169,7 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
   };
 
   const updateRate = (key: keyof RateProfile, val: number) => {
+    setRatesConfirmed(false);
     onUpdateRate(selectedCycleId, { ...currentRates, [key]: val });
   };
 
@@ -272,6 +280,35 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
                   </div>
                ) : (
                   <div className="flex flex-col h-full space-y-6">
+                     <AnimatePresence>
+                        {!ratesConfirmed && (
+                           <motion.div 
+                              initial={{ opacity: 0, height: 0, y: -20 }}
+                              animate={{ opacity: 1, height: 'auto', y: 0 }}
+                              exit={{ opacity: 0, height: 0, y: -20 }}
+                              className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm overflow-hidden"
+                           >
+                              <div className="flex items-center gap-3">
+                                 <div className="p-2.5 bg-amber-100 rounded-xl text-amber-600">
+                                    <AlertTriangle className="w-5 h-5" />
+                                 </div>
+                                 <div className="max-w-md">
+                                    <p className="text-sm font-black text-amber-900 leading-tight">Verify Compensation Rates</p>
+                                    <p className="text-xs text-amber-700 font-medium mt-0.5">Currently using <span className="font-bold underlinedecoration-amber-300 decoration-2">${currentRates.usd} / ₱{currentRates.php}</span> for this cycle. These rates affect all financial projections.</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                 <button 
+                                    onClick={() => setRatesConfirmed(true)}
+                                    className="flex-1 sm:flex-none px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-amber-200 active:scale-95"
+                                 >
+                                    Proceed with Rates
+                                 </button>
+                              </div>
+                           </motion.div>
+                        )}
+                     </AnimatePresence>
+
                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                         <motion.div 
                           initial={{ y: 20, opacity: 0 }}
@@ -522,10 +559,23 @@ const BillingReconciliationModal: React.FC<BillingReconciliationModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6 border-t border-slate-100 flex justify-end bg-white">
+        <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-white">
+           <div className="text-xs text-slate-400 font-medium max-w-xs">
+              {!ratesConfirmed && (
+                <div className="flex items-center gap-2 text-amber-600 font-bold">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Please verify rates above first</span>
+                </div>
+              )}
+           </div>
            <button 
               onClick={handleFinishReconciliation} 
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+              disabled={!ratesConfirmed}
+              className={`px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${
+                ratesConfirmed 
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 hover:scale-105 active:scale-95' 
+                  : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+              }`}
            >
               Update Billed Status <ArrowRight className="w-4 h-4" />
            </button>

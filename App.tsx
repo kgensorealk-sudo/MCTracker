@@ -155,9 +155,14 @@ const App: React.FC = () => {
   };
 
   const levelData = useMemo(() => {
-    const xp = calculateXP(manuscripts, targetPerCycle);
+    const xp = calculateXP(
+      manuscripts, 
+      targetPerCycle, 
+      userSchedule.legacyXP || 0, 
+      userSchedule.legacyAchievementXP || 0
+    );
     return calculateLevel(xp);
-  }, [manuscripts, targetPerCycle]);
+  }, [manuscripts, targetPerCycle, userSchedule.legacyXP, userSchedule.legacyAchievementXP]);
 
   // Cycle Progress for Header
   const cycleProgress = useMemo(() => {

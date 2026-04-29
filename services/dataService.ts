@@ -300,7 +300,9 @@ export const dataService = {
         targetPerCycle: data.target_per_cycle,
         userSchedule: {
           daysOff: data.days_off || [],
-          weeklyWeights: data.weekly_weights || [1, 1, 1, 1, 1, 1, 1]
+          weeklyWeights: data.weekly_weights || [1, 1, 1, 1, 1, 1, 1],
+          legacyXP: data.legacy_xp || 0,
+          legacyAchievementXP: data.legacy_achievement_xp || 0
         }
       };
     } catch (err: any) {
@@ -353,7 +355,9 @@ export const dataService = {
         .upsert({ 
           user_id: user.id, 
           days_off: schedule.daysOff, 
-          weekly_weights: schedule.weeklyWeights 
+          weekly_weights: schedule.weeklyWeights,
+          legacy_xp: schedule.legacyXP || 0,
+          legacy_achievement_xp: schedule.legacyAchievementXP || 0
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
